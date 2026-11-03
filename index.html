@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>나의 색 이름 실험</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column, one task at a time; the color stage is a fixed neutral grey in both themes */
+:root {
+  --bg: #F6F4EF; --surface: #FFFFFF; --fg: #1B2632; --muted: #5E6672; --line: #DCD6CA;
+  --accent: #2C3B4D; --accent-fg: #FFFFFF; --warm: #A35139; --soft: #EEE9DF;
+  --stage: #808080; --stage-line: #6E6E6E;
+  --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161D26; --surface: #1F2934; --fg: #ECE7DD; --muted: #A3ABB5; --line: #33404E;
+  --accent: #EEE9DF; --accent-fg: #1B2632; --warm: #E08E6D; --soft: #26313D; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #161D26; --surface: #1F2934; --fg: #ECE7DD; --muted: #A3ABB5; --line: #33404E;
+  --accent: #EEE9DF; --accent-fg: #1B2632; --warm: #E08E6D; --soft: #26313D; color-scheme: dark }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+img { max-width: 100%; }
+body { -webkit-text-size-adjust: 100%; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+.wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand { font-weight: 700; letter-spacing: -0.01em; font-size: 17px; }
+.step { font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+h1 { font-size: 24px; line-height: 1.35; margin: 0; text-wrap: balance; letter-spacing: -0.02em; }
+h2 { font-size: 19px; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+ul.checks { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.ex { background: var(--soft); border-radius: 10px; padding: 12px 14px; font-size: 15px; display: flex; flex-direction: column; gap: 4px; }
+.ex b { font-family: var(--mono); font-weight: 500; }
+label { font-weight: 500; font-size: 15px; }
+input[type=text] { width: 100%; font: inherit; font-size: 18px; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--line);
+  background: var(--bg); color: var(--fg); }
+input[type=text]:focus { outline: none; border-color: var(--accent); }
+.btns { display: flex; gap: 10px; flex-wrap: wrap; }
+button { font: inherit; font-weight: 500; font-size: 16px; padding: 12px 18px; border-radius: 10px; border: 1.5px solid var(--accent); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-fg); flex: 1; }
+button.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--warm); outline-offset: 2px; }
+.err { color: var(--warm); font-size: 14px; min-height: 1.2em; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); transition: width .25s; }
+/* the color stage: neutral grey surround, same in both themes */
+.stage { background: var(--stage); border-radius: 14px; padding: 36px; display: grid; place-items: center; }
+.patch { width: min(62vw, 240px); aspect-ratio: 1; max-width: 100%; border-radius: 6px; }
+.code { font-family: var(--mono); font-size: 12px; word-break: break-all; background: var(--soft); border-radius: 10px; padding: 12px; max-height: 140px; overflow: auto; user-select: all; }
+.ok { font-size: 14px; color: var(--muted); }
+/* ranking */
+.q { font-size: 18px; font-weight: 500; }
+.q em { font-style: normal; font-family: var(--mono); background: var(--soft); padding: 1px 6px; border-radius: 6px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (min-width: 520px) { .grid.n3, .grid.n5, .grid.n6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.opt { position: relative; padding: 0; border: 2px solid transparent; border-radius: 12px; overflow: hidden; background: var(--soft); }
+.opt img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.opt .tag { position: absolute; left: 8px; top: 8px; font-family: var(--mono); font-size: 12px; background: rgba(0,0,0,.55); color: #fff; padding: 2px 7px; border-radius: 6px; }
+.opt .rk { position: absolute; right: 8px; top: 8px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 17px; }
+.opt.on { border-color: var(--accent); }
+.foot { font-size: 13px; color: var(--muted); text-align: center; }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app" aria-live="polite"></div>
+
+<script>
+/* Study design: phase 1 = name seven colors (XKCD-style free naming); phase 2 = rank images per trial.
+   Patch colors: population mean (CIELAB) of XKCD answers for each term; the terms themselves are never shown. */
+const COLORS = [
+  { k: "c1", hex: "#EFA578" }, { k: "c2", hex: "#47B29E" }, { k: "c3", hex: "#B480D0" }, { k: "c4", hex: "#832437" },
+  { k: "c5", hex: "#CFB02D" }, { k: "c6", hex: "#CB2E97" }, { k: "c7", hex: "#D5C085" } ];
+const VERSION = "cs1";
+const app = document.getElementById("app");
+const S = { pid: "", phase: "home", order: [], i: 0, answers: [], t0: 0, tasks: null, trial: 0, ranks: {}, pick: [] };
+let DB = null, UID = null;
+
+const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+             set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const encode = obj => VERSION + "." + btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+const device = () => ({ w: screen.width, h: screen.height, dpr: window.devicePixelRatio || 1,
+  dark: matchMedia("(prefers-color-scheme: dark)").matches, ua: navigator.userAgent.slice(0, 160) });
+
+/* responses go to a Google Apps Script web app (apps_script.gs) that appends them to a Google Sheet */
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbwCvTPmdHTpjzjaPpZdl-j-OjecBMxxow6NTYnPsXauXDs4bW_SNbMGTN_sO14J0y8W/exec";
+async function send(body) {
+  if (!/^https:\/\/script\.google\.com\//.test(ENDPOINT)) return false;
+  const opt = { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) };
+  for (let t = 0; t < 3; t++) {
+    try { const r = await fetch(ENDPOINT, opt); const j = await r.json(); if (j.ok) return true; }
+    catch (e) { try { await fetch(ENDPOINT, Object.assign({}, opt, { mode: "no-cors" })); return true; } catch (e2) {} }
+    await new Promise(r => setTimeout(r, 800 * (t + 1)));
+  }
+  return false;
+}
+
+function view(html) { app.innerHTML = html; window.scrollTo(0, 0); }
+function header(step) {
+  return `<header><span class="brand">나의 색 이름 실험</span><span class="step">${esc(step)}</span></header>`;
+}
+
+/* ---------------- home ---------------- */
+function home() {
+  const mode = (location.hash || "#naming").slice(1);
+  if (mode === "ranking") return rankingHome();
+  view(`${header("1단계 · 색 이름 붙이기")}
+  <h1>사람마다 같은 색 이름이 가리키는 색은 조금씩 다릅니다.</h1>
+  <p class="muted">이 실험은 여러분이 색을 어떻게 부르는지 배워서, 여러분이 생각하는 색으로 이미지를 만들 수 있는지 확인합니다. 1단계는 약 2분 걸립니다.</p>
+  <div class="card">
+    <h2>시작하기 전에</h2>
+    <ul class="checks">
+      <li>화면 밝기를 평소처럼 두고, 야간 모드·블루라이트 필터는 꺼 주세요.</li>
+      <li>색 7개가 하나씩 나옵니다. 떠오르는 이름을 <b>영어로</b> 적어 주세요.</li>
+      <li>정답은 없습니다. 평소에 부르는 이름이면 됩니다.</li>
+    </ul>
+    <div class="ex"><span class="muted">예시</span><span><b>blue</b>, <b>light green</b>, <b>salmon</b>, <b>dusty rose</b>, <b>mustard yellow</b></span></div>
+  </div>
+  <div class="card">
+    <label for="pid">참가자 ID</label>
+    <p class="muted" style="font-size:14px">안내받은 ID를 적어 주세요. 2단계에서 같은 ID를 다시 씁니다.</p>
+    <input type="text" id="pid" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: P07" value="${esc(ls.get("pid") || "")}">
+    <div class="err" id="err"></div>
+    <div class="btns"><button class="primary" id="go">시작</button></div>
+  </div>
+  <p class="foot">2단계(이미지 순위)는 이미지가 준비되면 같은 주소 끝에 #ranking을 붙인 링크로 안내드립니다.</p>`);
+  const go = () => {
+    const v = document.getElementById("pid").value.trim();
+    if (!/^[A-Za-z0-9_-]{2,20}$/.test(v)) { document.getElementById("err").textContent = "영문·숫자 2–20자로 적어 주세요."; return; }
+    S.pid = v; ls.set("pid", v); S.order = shuffle(COLORS); S.i = 0; S.answers = []; naming();
+  };
+  document.getElementById("go").onclick = go;
+  document.getElementById("pid").onkeydown = e => { if (e.key === "Enter") go(); };
+}
+
+/* ---------------- phase 1: naming ---------------- */
+function naming() {
+  const c = S.order[S.i], n = S.order.length;
+  view(`${header(`색 ${S.i + 1} / ${n}`)}
+  <div class="bar"><i style="width:${(S.i / n) * 100}%"></i></div>
+  <div class="stage"><div class="patch" style="background:${c.hex}" role="img" aria-label="색 견본 ${S.i + 1}"></div></div>
+  <div class="card">
+    <label for="nm">이 색을 뭐라고 부르나요? (영어)</label>
+    <input type="text" id="nm" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: light green">
+    <div class="err" id="err"></div>
+    <div class="btns"><button class="primary" id="next">${S.i + 1 < n ? "다음" : "완료"}</button></div>
+  </div>`);
+  S.t0 = performance.now();
+  const inp = document.getElementById("nm"); inp.focus({ preventScroll: true });
+  const next = () => {
+    const v = inp.value.trim();
+    if (!v) { document.getElementById("err").textContent = "이름을 적어 주세요."; return; }
+    if (/[^\x20-\x7E]/.test(v)) { document.getElementById("err").textContent = "영어로 적어 주세요."; return; }
+    S.answers.push({ k: c.k, hex: c.hex, name: v.toLowerCase(), ms: Math.round(performance.now() - S.t0) });
+    S.i++; S.i < n ? naming() : namingDone();
+  };
+  document.getElementById("next").onclick = next;
+  inp.onkeydown = e => { if (e.key === "Enter") next(); };
+}
+
+async function namingDone() {
+  const body = { type: "naming", pid: S.pid, answers: S.answers, device: device(), at: new Date().toISOString(), v: VERSION };
+  ls.set("naming_" + S.pid, body);
+  view(`${header("1단계 완료")}<h1>응답을 보내는 중입니다…</h1><p class="muted">잠시만 기다려 주세요.</p>`);
+  const ok = await send(body);
+  if (ok) {
+    view(`${header("1단계 완료")}
+    <h1>감사합니다. 1단계를 마쳤습니다.</h1>
+    <div class="card"><p>응답이 저장되었습니다. 이 창은 닫으셔도 됩니다.</p>
+    <p class="muted">답을 바탕으로 이미지를 만든 뒤 2단계를 안내드립니다.</p></div>`);
+  } else failed(body);
+}
+
+function failed(body) {
+  const code = encode(body);
+  view(`${header("전송 실패")}
+  <h1>응답을 서버에 보내지 못했습니다.</h1>
+  <div class="card">
+    <p class="muted">인터넷 연결을 확인하고 다시 보내 주세요. 계속 안 되면 아래 코드를 복사해 연구자에게 보내 주세요.</p>
+    <div class="btns"><button class="primary" id="retry">다시 보내기</button></div>
+    <div class="code" id="code">${esc(code)}</div>
+    <div class="btns"><button class="ghost" id="copy">코드 복사</button></div>
+  </div>`);
+  wireCopy(code);
+  document.getElementById("retry").onclick = async () => {
+    const b = document.getElementById("retry"); b.disabled = true; b.textContent = "보내는 중…";
+    if (await send(body)) { if (body.type === "naming") namingDone(); else { S.trial++; S.trial < S.trials.length ? trial() : rankingDone(); } }
+    else { b.disabled = false; b.textContent = "다시 보내기"; }
+  };
+}
+
+function wireCopy(code) {
+  const b = document.getElementById("copy");
+  b.onclick = async () => {
+    try { await navigator.clipboard.writeText(code); b.textContent = "복사됨"; }
+    catch (e) { const r = document.createRange(); r.selectNodeContents(document.getElementById("code"));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "선택됨 · 길게 눌러 복사"; }
+  };
+}
+
+/* ---------------- phase 2: ranking ---------------- */
+async function loadTasks() {
+  if (S.tasks) return S.tasks;
+  try { const r = await fetch("tasks.json", { cache: "no-store" }); if (r.ok) S.tasks = await r.json(); } catch (e) {}
+  return S.tasks || {};
+}
+
+function rankingHome() {
+  view(`${header("2단계 · 이미지 순위")}
+  <h1>여러분의 색 이름으로 만든 이미지를 비교해 주세요.</h1>
+  <p class="muted">같은 물체를 여러 방법으로 만든 이미지가 나옵니다. 질문 속 색 이름이 여러분이 생각하는 색에 가까운 순서대로 이미지를 눌러 주세요.</p>
+  <div class="card">
+    <label for="pid">참가자 ID</label>
+    <input type="text" id="pid" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="1단계에서 쓴 ID" value="${esc(ls.get("pid") || "")}">
+    <div class="err" id="err"></div>
+    <div class="btns"><button class="primary" id="go">시작</button></div>
+  </div>`);
+  const go = async () => {
+    const v = document.getElementById("pid").value.trim(); const t = await loadTasks();
+    if (!t[v] || !t[v].length) { document.getElementById("err").textContent = "이 ID의 이미지가 아직 준비되지 않았습니다. 안내를 받은 뒤 다시 와 주세요."; return; }
+    S.pid = v; ls.set("pid", v); S.trials = t[v]; S.trial = 0; S.ranks = ls.get("ranks_" + v) || {};
+    while (S.trial < S.trials.length && S.ranks[S.trials[S.trial].id]) S.trial++;
+    S.trial < S.trials.length ? trial() : rankingDone();
+  };
+  document.getElementById("go").onclick = go;
+  document.getElementById("pid").onkeydown = e => { if (e.key === "Enter") go(); };
+}
+
+function trial() {
+  const T = S.trials[S.trial], n = S.trials.length;
+  if (!T.order) T.order = shuffle(T.images.map(x => x.key));
+  S.pick = [];
+  const imgs = T.order.map(k => T.images.find(x => x.key === k));
+  view(`${header(`문항 ${S.trial + 1} / ${n}`)}
+  <div class="bar"><i style="width:${(S.trial / n) * 100}%"></i></div>
+  <div class="card">
+    <p class="q">Which <em>${esc(T.object)}</em> in the image is closer to your <em>${esc(T.color)}</em>?</p>
+    <p class="muted" style="font-size:14px">여러분이 생각하는 <b>${esc(T.color)}</b>에 가장 가까운 이미지부터 차례로 눌러 주세요. 모두 누르면 다음으로 넘어갈 수 있습니다.</p>
+  </div>
+  <div class="grid n${imgs.length}" id="grid">${imgs.map((x, j) => `
+    <button class="opt" data-k="${esc(x.key)}" aria-label="이미지 ${String.fromCharCode(65 + j)}">
+      <img src="${esc(x.src)}" alt="" loading="eager"><span class="tag">${String.fromCharCode(65 + j)}</span></button>`).join("")}
+  </div>
+  <div class="btns"><button class="ghost" id="reset">다시 고르기</button><button class="primary" id="next" disabled>${S.trial + 1 < n ? "다음" : "완료"}</button></div>`);
+  const grid = document.getElementById("grid"), next = document.getElementById("next");
+  const paint = () => {
+    grid.querySelectorAll(".opt").forEach(b => {
+      const r = S.pick.indexOf(b.dataset.k); b.classList.toggle("on", r >= 0);
+      const old = b.querySelector(".rk"); if (old) old.remove(); if (r >= 0) b.insertAdjacentHTML("beforeend", `<span class="rk">${r + 1}</span>`);
+    });
+    next.disabled = S.pick.length !== imgs.length;
+  };
+  grid.onclick = e => { const b = e.target.closest(".opt"); if (!b) return; const k = b.dataset.k;
+    const r = S.pick.indexOf(k); r >= 0 ? S.pick.splice(r, 1) : S.pick.push(k); paint(); };
+  document.getElementById("reset").onclick = () => { S.pick = []; paint(); };
+  next.onclick = async () => {
+    S.ranks[T.id] = { rank: S.pick.slice(), shown: T.order.slice(), at: new Date().toISOString() };
+    ls.set("ranks_" + S.pid, S.ranks);
+    next.disabled = true; next.textContent = "저장 중…";
+    const body = { type: "rank", pid: S.pid, trial: T.id, object: T.object, color: T.color, rank: S.pick.slice(), shown: T.order.slice(),
+                   device: device(), at: new Date().toISOString(), v: VERSION };
+    S.trial++;
+    if (!(await send(body))) { S.trial--; failed(body); return; }
+    S.trial < n ? trial() : rankingDone();
+  };
+}
+
+function rankingDone() {
+  view(`${header("2단계 완료")}
+  <h1>모든 문항을 마쳤습니다. 참여해 주셔서 감사합니다.</h1>
+  <div class="card"><p>응답이 저장되었습니다. 이 창은 닫으셔도 됩니다.</p></div>`);
+}
+
+window.addEventListener("hashchange", home);
+home();
+</script>
+</body>
+</html>
