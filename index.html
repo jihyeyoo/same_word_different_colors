@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>나의 색 이름 실험</title>
+<title>Your Color Names</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: one narrow column, one task at a time; the color stage is a fixed neutral grey in both themes */
@@ -68,6 +68,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--warm); outl
   background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 17px; }
 .opt.on { border-color: var(--accent); }
 .foot { font-size: 13px; color: var(--muted); text-align: center; }
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.choice { background: var(--bg); color: var(--fg); border: 1.5px solid var(--line); text-align: left; padding: 11px 14px; font-weight: 400; }
+.choice.on { border-color: var(--accent); background: var(--soft); font-weight: 500; }
+.plate { width: min(72vw, 280px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; background: #fff; }
+.plate-stage { background: #F2F0EA; border-radius: 14px; padding: 20px; display: grid; place-items: center; }
+.wait { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.clock { font-family: var(--mono); font-size: 34px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
 </style>
 </head>
@@ -75,215 +82,276 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--warm); outl
 <div class="wrap" id="app" aria-live="polite"></div>
 
 <script>
-/* Study design: phase 1 = name seven colors (XKCD-style free naming); phase 2 = rank images per trial.
-   Patch colors: population mean (CIELAB) of XKCD answers for each term; the terms themselves are never shown. */
+/* One session: ID -> name 7 colors -> (our images are generated on the study server meanwhile) -> short survey with a simple
+   color-vision check -> wait if needed -> rank 10 trials (ours + 4 baselines). Responses go to the Google Sheet (apps_script.gs).
+   Patch colors: XKCD population mean (CIELAB) of peach, teal, lavender, maroon, gold, magenta, beige; the words are never shown. */
 const COLORS = [
   { k: "c1", hex: "#EFA578" }, { k: "c2", hex: "#47B29E" }, { k: "c3", hex: "#B480D0" }, { k: "c4", hex: "#832437" },
   { k: "c5", hex: "#CFB02D" }, { k: "c6", hex: "#CB2E97" }, { k: "c7", hex: "#D5C085" } ];
-const VERSION = "cs1";
-const app = document.getElementById("app");
-const S = { pid: "", phase: "home", order: [], i: 0, answers: [], t0: 0, tasks: null, trial: 0, ranks: {}, pick: [] };
-let DB = null, UID = null;
+const TRIALS = [
+  { id: "t01", color: "peach", object: "sweater" }, { id: "t02", color: "teal", object: "vase" },
+  { id: "t03", color: "lavender", object: "dress" }, { id: "t04", color: "maroon", object: "chair" },
+  { id: "t05", color: "gold", object: "bicycle" }, { id: "t06", color: "magenta", object: "umbrella" },
+  { id: "t07", color: "beige", object: "sofa" }, { id: "t08", color: "teal", object: "car" },
+  { id: "t09", color: "peach", object: "bowl" }, { id: "t10", color: "maroon", object: "door" } ];
+const BASELINES = ["sd35", "flux", "richtext", "colorwave"];       // images/<trial>/<key>.jpg (participant-independent)
+const VERSION = "cs2";
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbwCvTPmdHTpjzjaPpZdl-j-OjecBMxxow6NTYnPsXauXDs4bW_SNbMGTN_sO14J0y8W/exec";
+let SERVER = "";                                                    // from config.json (the study server's public address)
 
+const app = document.getElementById("app");
+const S = { pid: "", order: [], i: 0, answers: [], t0: 0, job: "", survey: {}, ours: {}, eta: 0, etaAt: 0, trial: 0, pick: [], shown: {} };
 const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
              set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const encode = obj => VERSION + "." + btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 const device = () => ({ w: screen.width, h: screen.height, dpr: window.devicePixelRatio || 1,
   dark: matchMedia("(prefers-color-scheme: dark)").matches, ua: navigator.userAgent.slice(0, 160) });
+const encode = obj => VERSION + "." + btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
 
-/* responses go to a Google Apps Script web app (apps_script.gs) that appends them to a Google Sheet */
-const ENDPOINT = "https://script.google.com/macros/s/AKfycbwCvTPmdHTpjzjaPpZdl-j-OjecBMxxow6NTYnPsXauXDs4bW_SNbMGTN_sO14J0y8W/exec";
-async function send(body) {
-  if (!/^https:\/\/script\.google\.com\//.test(ENDPOINT)) return false;
+async function sheet(body) {                                        // append one row to the Google Sheet
   const opt = { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) };
   for (let t = 0; t < 3; t++) {
     try { const r = await fetch(ENDPOINT, opt); const j = await r.json(); if (j.ok) return true; }
     catch (e) { try { await fetch(ENDPOINT, Object.assign({}, opt, { mode: "no-cors" })); return true; } catch (e2) {} }
-    await new Promise(r => setTimeout(r, 800 * (t + 1)));
+    await sleep(800 * (t + 1));
   }
   return false;
 }
-
-function view(html) { app.innerHTML = html; window.scrollTo(0, 0); }
-function header(step) {
-  return `<header><span class="brand">나의 색 이름 실험</span><span class="step">${esc(step)}</span></header>`;
+async function api(path, body) {                                    // the study server
+  const r = await fetch(SERVER + path, body ? { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) } : {});
+  if (!r.ok) throw new Error("server " + r.status);
+  return r.json();
 }
+function view(html) { app.innerHTML = html; window.scrollTo(0, 0); }
+const header = step => `<header><span class="brand">Your Color Names</span><span class="step">${esc(step)}</span></header>`;
+const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0") + " s"; };
 
-/* ---------------- home ---------------- */
+/* ---------------- start ---------------- */
 function home() {
-  const mode = (location.hash || "#naming").slice(1);
-  if (mode === "ranking") return rankingHome();
-  view(`${header("1단계 · 색 이름 붙이기")}
-  <h1>사람마다 같은 색 이름이 가리키는 색은 조금씩 다릅니다.</h1>
-  <p class="muted">이 실험은 여러분이 색을 어떻게 부르는지 배워서, 여러분이 생각하는 색으로 이미지를 만들 수 있는지 확인합니다. 1단계는 약 2분 걸립니다.</p>
+  view(`${header("About 10 min")}
+  <h1>The same color name can mean slightly different colors to different people.</h1>
+  <p>Color is a really fascinating topic, especially since we’re taught so many different and often contradictory ideas about rainbows, different primary colors, and frequencies of light.</p>
+  <p class="muted">In this study, we learn how you name colors and test whether images can be generated in the colors you have in mind. You will name a few colors, answer a short survey, and then rank images, all in one session.</p>
   <div class="card">
-    <h2>시작하기 전에</h2>
+    <h2>Before you start</h2>
     <ul class="checks">
-      <li>화면 밝기를 평소처럼 두고, 야간 모드·블루라이트 필터는 꺼 주세요.</li>
-      <li>색 7개가 하나씩 나옵니다. 떠오르는 이름을 <b>영어로</b> 적어 주세요.</li>
-      <li>정답은 없습니다. 평소에 부르는 이름이면 됩니다.</li>
+      <li>Keep your screen brightness at its usual level, and turn off night mode or any blue-light filter.</li>
+      <li>Seven colors will appear one at a time. Type the name that comes to mind, <b>in English</b>.</li>
+      <li>There are no right or wrong answers. Use the name you would normally use.</li>
     </ul>
-    <div class="ex"><span class="muted">예시</span><span><b>blue</b>, <b>light green</b>, <b>salmon</b>, <b>dusty rose</b>, <b>mustard yellow</b></span></div>
+    <div class="ex"><span class="muted">Examples</span><span><b>blue</b>, <b>light green</b>, <b>salmon</b>, <b>dusty rose</b>, <b>mustard yellow</b></span></div>
   </div>
   <div class="card">
-    <label for="pid">참가자 ID</label>
-    <p class="muted" style="font-size:14px">안내받은 ID를 적어 주세요. 2단계에서 같은 ID를 다시 씁니다.</p>
-    <input type="text" id="pid" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: P07" value="${esc(ls.get("pid") || "")}">
+    <label for="pid">Participant ID</label>
+    <input type="text" id="pid" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., P07" value="${esc(ls.get("pid") || "")}">
     <div class="err" id="err"></div>
-    <div class="btns"><button class="primary" id="go">시작</button></div>
-  </div>
-  <p class="foot">2단계(이미지 순위)는 이미지가 준비되면 같은 주소 끝에 #ranking을 붙인 링크로 안내드립니다.</p>`);
-  const go = () => {
-    const v = document.getElementById("pid").value.trim();
-    if (!/^[A-Za-z0-9_-]{2,20}$/.test(v)) { document.getElementById("err").textContent = "영문·숫자 2–20자로 적어 주세요."; return; }
+    <div class="btns"><button class="primary" id="go">Start</button></div>
+  </div>`);
+  const go = async () => {
+    const v = document.getElementById("pid").value.trim(), err = document.getElementById("err");
+    if (!/^[A-Za-z0-9_-]{2,20}$/.test(v)) { err.textContent = "Please use 2–20 letters or digits."; return; }
+    try { const h = await api("/health"); if (!h.ok || !h.workers) throw 0; }
+    catch (e) { err.textContent = "We cannot reach the study server right now. Please try again in a moment or contact the researcher."; return; }
     S.pid = v; ls.set("pid", v); S.order = shuffle(COLORS); S.i = 0; S.answers = []; naming();
   };
   document.getElementById("go").onclick = go;
   document.getElementById("pid").onkeydown = e => { if (e.key === "Enter") go(); };
 }
 
-/* ---------------- phase 1: naming ---------------- */
+/* ---------------- 1. naming ---------------- */
 function naming() {
   const c = S.order[S.i], n = S.order.length;
-  view(`${header(`색 ${S.i + 1} / ${n}`)}
+  view(`${header(`Color ${S.i + 1} of ${n}`)}
   <div class="bar"><i style="width:${(S.i / n) * 100}%"></i></div>
-  <div class="stage"><div class="patch" style="background:${c.hex}" role="img" aria-label="색 견본 ${S.i + 1}"></div></div>
+  <div class="stage"><div class="patch" style="background:${c.hex}" role="img" aria-label="Color sample ${S.i + 1}"></div></div>
   <div class="card">
-    <label for="nm">이 색을 뭐라고 부르나요? (영어)</label>
-    <input type="text" id="nm" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: light green">
+    <label for="nm">What would you call this color?</label>
+    <input type="text" id="nm" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., light green">
     <div class="err" id="err"></div>
-    <div class="btns"><button class="primary" id="next">${S.i + 1 < n ? "다음" : "완료"}</button></div>
+    <div class="btns"><button class="primary" id="next">${S.i + 1 < n ? "Next" : "Done"}</button></div>
   </div>`);
   S.t0 = performance.now();
   const inp = document.getElementById("nm"); inp.focus({ preventScroll: true });
   const next = () => {
-    const v = inp.value.trim();
-    if (!v) { document.getElementById("err").textContent = "이름을 적어 주세요."; return; }
-    if (/[^\x20-\x7E]/.test(v)) { document.getElementById("err").textContent = "영어로 적어 주세요."; return; }
+    const v = inp.value.trim(), err = document.getElementById("err");
+    if (!v) { err.textContent = "Please type a name."; return; }
+    if (/[^\x20-\x7E]/.test(v)) { err.textContent = "Please type the name in English."; return; }
     S.answers.push({ k: c.k, hex: c.hex, name: v.toLowerCase(), ms: Math.round(performance.now() - S.t0) });
-    S.i++; S.i < n ? naming() : namingDone();
+    S.i++; S.i < n ? naming() : submitNaming();
   };
   document.getElementById("next").onclick = next;
   inp.onkeydown = e => { if (e.key === "Enter") next(); };
 }
 
-async function namingDone() {
-  const body = { type: "naming", pid: S.pid, answers: S.answers, device: device(), at: new Date().toISOString(), v: VERSION };
-  ls.set("naming_" + S.pid, body);
-  view(`${header("1단계 완료")}<h1>응답을 보내는 중입니다…</h1><p class="muted">잠시만 기다려 주세요.</p>`);
-  const ok = await send(body);
-  if (ok) {
-    view(`${header("1단계 완료")}
-    <h1>감사합니다. 1단계를 마쳤습니다.</h1>
-    <div class="card"><p>응답이 저장되었습니다. 이 창은 닫으셔도 됩니다.</p>
-    <p class="muted">답을 바탕으로 이미지를 만든 뒤 2단계를 안내드립니다.</p></div>`);
-  } else failed(body);
+async function submitNaming() {
+  view(`${header("One moment")}<h1>Sending your answers…</h1>`);
+  for (let t = 0; t < 3 && !S.job; t++) {
+    try { const r = await api("/submit", { pid: S.pid, answers: S.answers.map(a => ({ hex: a.hex, name: a.name })) }); S.job = r.job; setEta(r.eta_s); }
+    catch (e) { await sleep(1500); }
+  }
+  if (!S.job) {
+    view(`${header("Connection error")}<h1>Your answers could not be sent to the study server.</h1>
+    <div class="card"><p class="muted">Please check your internet connection and try again.</p><div class="btns"><button class="primary" id="re">Try again</button></div></div>`);
+    document.getElementById("re").onclick = submitNaming; return;
+  }
+  ls.set("job_" + S.pid, S.job); poll(); survey(0);
 }
 
-function failed(body) {
-  const code = encode(body);
-  view(`${header("전송 실패")}
-  <h1>응답을 서버에 보내지 못했습니다.</h1>
+/* our images: poll the server in the background */
+function setEta(s) { S.eta = s; S.etaAt = Date.now(); }
+const etaLeft = () => Math.max(0, S.eta - (Date.now() - S.etaAt) / 1000);
+async function poll() {
+  while (Object.keys(S.ours).length < TRIALS.length) {
+    try { const r = await api("/status?job=" + S.job);
+      for (const [k, u] of Object.entries(r.images)) S.ours[k] = SERVER + u;
+      if (Math.abs(r.eta_s - etaLeft()) > 5) setEta(r.eta_s); } catch (e) {}
+    await sleep(3000);
+  }
+}
+
+/* ---------------- 2. survey (while the images are generated) ---------------- */
+const PLATES = [                                                    // simple pseudo-isochromatic plates (screening only)
+  { id: "p0", digit: "12", kind: "control" }, { id: "p1", digit: "8", kind: "rg" },
+  { id: "p2", digit: "29", kind: "rg" }, { id: "p3", digit: "74", kind: "rg" } ];
+const QUESTIONS = [
+  { id: "age", q: "What is your age group?", opts: ["Under 20", "20–29", "30–39", "40–49", "50 or older", "Prefer not to say"] },
+  { id: "device", q: "Which device are you using right now?", opts: ["Phone", "Tablet", "Laptop", "Desktop monitor"] },
+  { id: "cvd", q: "Have you ever been diagnosed with color vision deficiency (color blindness)?", opts: ["No", "Yes", "Not sure"] } ];
+
+function survey(k) {
+  const total = QUESTIONS.length + PLATES.length;
+  if (k < QUESTIONS.length) {
+    const Q = QUESTIONS[k];
+    view(`${header(`Question ${k + 1} of ${total}`)}
+    <p class="muted">While we generate your images, here are a few short questions.</p>
+    <div class="card"><h2>${esc(Q.q)}</h2>
+      <div class="choices">${Q.opts.map(o => `<button class="choice" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>`);
+    app.querySelectorAll(".choice").forEach(b => b.onclick = () => { S.survey[Q.id] = b.dataset.v; survey(k + 1); });
+    return;
+  }
+  const j = k - QUESTIONS.length;
+  if (j >= PLATES.length) return afterSurvey();
+  const P = PLATES[j];
+  view(`${header(`Question ${k + 1} of ${total}`)}
+  <div class="card"><h2>Quick color vision check</h2>
+    <p class="muted" style="font-size:14px">Type the number you see in the circle. If you see no number, tap "I see none". (This is for reference only, not a diagnosis.)</p></div>
+  <div class="plate-stage"><canvas class="plate" id="plate" width="560" height="560" aria-label="Color vision plate ${j + 1}"></canvas></div>
   <div class="card">
-    <p class="muted">인터넷 연결을 확인하고 다시 보내 주세요. 계속 안 되면 아래 코드를 복사해 연구자에게 보내 주세요.</p>
-    <div class="btns"><button class="primary" id="retry">다시 보내기</button></div>
-    <div class="code" id="code">${esc(code)}</div>
-    <div class="btns"><button class="ghost" id="copy">코드 복사</button></div>
+    <input type="text" id="ans" inputmode="numeric" autocomplete="off" placeholder="Number">
+    <div class="btns"><button class="ghost" id="none">I see none</button><button class="primary" id="ok">Next</button></div>
   </div>`);
-  wireCopy(code);
-  document.getElementById("retry").onclick = async () => {
-    const b = document.getElementById("retry"); b.disabled = true; b.textContent = "보내는 중…";
-    if (await send(body)) { if (body.type === "naming") namingDone(); else { S.trial++; S.trial < S.trials.length ? trial() : rankingDone(); } }
-    else { b.disabled = false; b.textContent = "다시 보내기"; }
-  };
+  drawPlate(document.getElementById("plate"), P);
+  const done = v => { S.survey["plate_" + P.id] = { digit: P.digit, answer: v }; survey(k + 1); };
+  document.getElementById("ok").onclick = () => { const v = document.getElementById("ans").value.trim(); if (v) done(v); };
+  document.getElementById("none").onclick = () => done("none");
+  document.getElementById("ans").onkeydown = e => { if (e.key === "Enter" && e.target.value.trim()) done(e.target.value.trim()); };
 }
 
-function wireCopy(code) {
-  const b = document.getElementById("copy");
-  b.onclick = async () => {
-    try { await navigator.clipboard.writeText(code); b.textContent = "복사됨"; }
-    catch (e) { const r = document.createRange(); r.selectNodeContents(document.getElementById("code"));
-      const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "선택됨 · 길게 눌러 복사"; }
-  };
+function drawPlate(cv, P) {
+  const ctx = cv.getContext("2d"), W = cv.width, R = W / 2 - 6;
+  const mask = document.createElement("canvas"); mask.width = mask.height = W; const m = mask.getContext("2d");
+  m.fillStyle = "#000"; m.font = `bold ${P.digit.length > 1 ? 250 : 320}px Arial, sans-serif`; m.textAlign = "center"; m.textBaseline = "middle";
+  m.fillText(P.digit, W / 2, W / 2 + 12); const md = m.getImageData(0, 0, W, W).data;
+  const inside = (x, y) => md[(Math.floor(y) * W + Math.floor(x)) * 4 + 3] > 128;
+  const FG = P.kind === "control" ? ["#3E4A63", "#4B5873", "#36415A"] : ["#D8784F", "#CF6C46", "#E08A60", "#C96A48"];
+  const BG = P.kind === "control" ? ["#D9C9A8", "#E3D5B8", "#CFBE9C"] : ["#A2A85A", "#98A052", "#AEB466", "#8F984C"];
+  let seed = 7 + P.digit.charCodeAt(0); const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  ctx.clearRect(0, 0, W, W); const dots = [];
+  for (let t = 0; t < 9000 && dots.length < 1100; t++) {
+    const r = 5 + rnd() * 9, a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * (R - r);
+    const x = W / 2 + Math.cos(a) * d, y = W / 2 + Math.sin(a) * d;
+    if (dots.some(o => (o.x - x) ** 2 + (o.y - y) ** 2 < (o.r + r + 1.5) ** 2)) continue;
+    dots.push({ x, y, r });
+    const pal = inside(x, y) ? FG : BG; ctx.fillStyle = pal[Math.floor(rnd() * pal.length)];
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
 }
 
-/* ---------------- phase 2: ranking ---------------- */
-async function loadTasks() {
-  if (S.tasks) return S.tasks;
-  try { const r = await fetch("tasks.json", { cache: "no-store" }); if (r.ok) S.tasks = await r.json(); } catch (e) {}
-  return S.tasks || {};
+async function afterSurvey() {
+  S.sends = [sheet({ type: "naming", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(), at: new Date().toISOString(), v: VERSION })];
+  S.trial = 0; S.shown = {}; nextTrial();
 }
 
-function rankingHome() {
-  view(`${header("2단계 · 이미지 순위")}
-  <h1>여러분의 색 이름으로 만든 이미지를 비교해 주세요.</h1>
-  <p class="muted">같은 물체를 여러 방법으로 만든 이미지가 나옵니다. 질문 속 색 이름이 여러분이 생각하는 색에 가까운 순서대로 이미지를 눌러 주세요.</p>
+/* ---------------- 3. ranking ---------------- */
+async function nextTrial() {
+  if (S.trial >= TRIALS.length) return finish();
+  const T = TRIALS[S.trial];
+  if (!S.ours[T.id]) return waiting(T);
+  trial(T);
+}
+
+function waiting(T) {
+  const done = Object.keys(S.ours).length;
+  view(`${header("Preparing images")}
+  <h1>We are generating images in your colors.</h1>
   <div class="card">
-    <label for="pid">참가자 ID</label>
-    <input type="text" id="pid" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="1단계에서 쓴 ID" value="${esc(ls.get("pid") || "")}">
-    <div class="err" id="err"></div>
-    <div class="btns"><button class="primary" id="go">시작</button></div>
+    <div class="wait"><span class="clock" id="clock">${fmt(etaLeft())}</span><span class="muted">left. Please wait a moment.</span></div>
+    <div class="bar"><i id="pg" style="width:${done * 10}%"></i></div>
+    <p class="muted" style="font-size:14px" id="cnt">${done} / ${TRIALS.length} done · Please keep this page open.</p>
   </div>`);
-  const go = async () => {
-    const v = document.getElementById("pid").value.trim(); const t = await loadTasks();
-    if (!t[v] || !t[v].length) { document.getElementById("err").textContent = "이 ID의 이미지가 아직 준비되지 않았습니다. 안내를 받은 뒤 다시 와 주세요."; return; }
-    S.pid = v; ls.set("pid", v); S.trials = t[v]; S.trial = 0; S.ranks = ls.get("ranks_" + v) || {};
-    while (S.trial < S.trials.length && S.ranks[S.trials[S.trial].id]) S.trial++;
-    S.trial < S.trials.length ? trial() : rankingDone();
-  };
-  document.getElementById("go").onclick = go;
-  document.getElementById("pid").onkeydown = e => { if (e.key === "Enter") go(); };
+  const tick = setInterval(() => {
+    const c = document.getElementById("clock"); if (!c) return clearInterval(tick);
+    const left = etaLeft(); c.textContent = left > 0 ? fmt(left) : "Almost done";
+    const d = Object.keys(S.ours).length; document.getElementById("pg").style.width = d * 10 + "%";
+    document.getElementById("cnt").textContent = `${d} / ${TRIALS.length} done · Please keep this page open.`;
+    if (S.ours[T.id]) { clearInterval(tick); trial(T); }
+  }, 1000);
 }
 
-function trial() {
-  const T = S.trials[S.trial], n = S.trials.length;
-  if (!T.order) T.order = shuffle(T.images.map(x => x.key));
+function trial(T) {
+  const n = TRIALS.length;
+  if (!S.shown[T.id]) S.shown[T.id] = shuffle(["ours"].concat(BASELINES));
   S.pick = [];
-  const imgs = T.order.map(k => T.images.find(x => x.key === k));
-  view(`${header(`문항 ${S.trial + 1} / ${n}`)}
+  const order = S.shown[T.id];
+  const src = k => k === "ours" ? S.ours[T.id] : `images/${T.id}/${k}.jpg`;
+  view(`${header(`Item ${S.trial + 1} of ${n}`)}
   <div class="bar"><i style="width:${(S.trial / n) * 100}%"></i></div>
   <div class="card">
     <p class="q">Which <em>${esc(T.object)}</em> in the image is closer to your <em>${esc(T.color)}</em>?</p>
-    <p class="muted" style="font-size:14px">여러분이 생각하는 <b>${esc(T.color)}</b>에 가장 가까운 이미지부터 차례로 눌러 주세요. 모두 누르면 다음으로 넘어갈 수 있습니다.</p>
+    <p class="muted" style="font-size:14px">Tap the images in order, starting with the one closest to what <b>${esc(T.color)}</b> means to you. When all images are ranked, you can continue.</p>
   </div>
-  <div class="grid n${imgs.length}" id="grid">${imgs.map((x, j) => `
-    <button class="opt" data-k="${esc(x.key)}" aria-label="이미지 ${String.fromCharCode(65 + j)}">
-      <img src="${esc(x.src)}" alt="" loading="eager"><span class="tag">${String.fromCharCode(65 + j)}</span></button>`).join("")}
+  <div class="grid n${order.length}" id="grid">${order.map((k, j) => `
+    <button class="opt" data-k="${esc(k)}" aria-label="Image ${String.fromCharCode(65 + j)}">
+      <img src="${esc(src(k))}" alt=""><span class="tag">${String.fromCharCode(65 + j)}</span></button>`).join("")}
   </div>
-  <div class="btns"><button class="ghost" id="reset">다시 고르기</button><button class="primary" id="next" disabled>${S.trial + 1 < n ? "다음" : "완료"}</button></div>`);
+  <div class="btns"><button class="ghost" id="reset">Reset</button><button class="primary" id="next" disabled>${S.trial + 1 < n ? "Next" : "Done"}</button></div>`);
   const grid = document.getElementById("grid"), next = document.getElementById("next");
   const paint = () => {
     grid.querySelectorAll(".opt").forEach(b => {
       const r = S.pick.indexOf(b.dataset.k); b.classList.toggle("on", r >= 0);
-      const old = b.querySelector(".rk"); if (old) old.remove(); if (r >= 0) b.insertAdjacentHTML("beforeend", `<span class="rk">${r + 1}</span>`);
+      const old = b.querySelector(".rk"); if (old) old.remove();
+      if (r >= 0) b.insertAdjacentHTML("beforeend", `<span class="rk">${r + 1}</span>`);
     });
-    next.disabled = S.pick.length !== imgs.length;
+    next.disabled = S.pick.length !== order.length;
   };
   grid.onclick = e => { const b = e.target.closest(".opt"); if (!b) return; const k = b.dataset.k;
     const r = S.pick.indexOf(k); r >= 0 ? S.pick.splice(r, 1) : S.pick.push(k); paint(); };
   document.getElementById("reset").onclick = () => { S.pick = []; paint(); };
-  next.onclick = async () => {
-    S.ranks[T.id] = { rank: S.pick.slice(), shown: T.order.slice(), at: new Date().toISOString() };
-    ls.set("ranks_" + S.pid, S.ranks);
-    next.disabled = true; next.textContent = "저장 중…";
-    const body = { type: "rank", pid: S.pid, trial: T.id, object: T.object, color: T.color, rank: S.pick.slice(), shown: T.order.slice(),
-                   device: device(), at: new Date().toISOString(), v: VERSION };
-    S.trial++;
-    if (!(await send(body))) { S.trial--; failed(body); return; }
-    S.trial < n ? trial() : rankingDone();
+  next.onclick = () => {
+    S.sends = (S.sends || []).concat(sheet({ type: "rank", pid: S.pid, job: S.job, trial: T.id, object: T.object, color: T.color, rank: S.pick.slice(), shown: order.slice(),
+            at: new Date().toISOString(), v: VERSION }));                         // sent in the background
+    S.ranks = Object.assign(S.ranks || {}, { [T.id]: S.pick.slice() }); S.trial++; nextTrial();
   };
 }
 
-function rankingDone() {
-  view(`${header("2단계 완료")}
-  <h1>모든 문항을 마쳤습니다. 참여해 주셔서 감사합니다.</h1>
-  <div class="card"><p>응답이 저장되었습니다. 이 창은 닫으셔도 됩니다.</p></div>`);
+async function finish() {
+  view(`${header("Saving")}<h1>Saving your responses…</h1><p class="muted">Please keep this page open.</p>`);
+  const ok = (await Promise.all(S.sends || [])).every(Boolean);
+  if (ok) return view(`${header("Done")}
+    <h1>You have finished. Thank you for taking part!</h1>
+    <div class="card"><p>Your responses have been saved. You may now close this page.</p></div>`);
+  const code = encode({ pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, shown: S.shown, ranks: S.ranks, v: VERSION });
+  view(`${header("Please check")}
+    <h1>Some responses may not have been saved.</h1>
+    <div class="card"><p class="muted">Please copy the code below and send it to the researcher.</p><div class="code">${esc(code)}</div></div>`);
 }
 
-window.addEventListener("hashchange", home);
-home();
+(async () => {
+  try { const c = await (await fetch("config.json", { cache: "no-store" })).json(); SERVER = (c.server || "").replace(/\/$/, ""); } catch (e) {}
+  home();
+})();
 </script>
 </body>
 </html>
