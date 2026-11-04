@@ -224,9 +224,9 @@ const PLATES = [                                                    // simple ps
   { id: "p0", digit: "12", kind: "control" }, { id: "p1", digit: "8", kind: "rg" },
   { id: "p2", digit: "29", kind: "rg" }, { id: "p3", digit: "74", kind: "rg" } ];
 const QUESTIONS = [
-  { id: "age", q: "What is your age group?", opts: ["Under 20", "20–29", "30–39", "40–49", "50 or older", "Prefer not to say"] },
+  { id: "age", q: "What is your age group?", opts: ["Under 20", "20–29", "30–39", "40–49", "50–59", "60–69", "70 or older"] },
   { id: "device", q: "Which device are you using right now?", opts: ["Phone", "Tablet", "Laptop", "Desktop monitor"] },
-  { id: "cvd", q: "Have you ever been diagnosed with color vision deficiency (color blindness)?", opts: ["No", "Yes", "Not sure"] } ];
+  { id: "cvd", q: "Have you ever been diagnosed with color vision deficiency (color blindness)?", opts: ["No", "Yes"] } ];
 
 function survey(k) {
   const total = QUESTIONS.length + PLATES.length;
