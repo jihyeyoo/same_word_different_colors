@@ -163,6 +163,7 @@ function home() {
     const err = document.getElementById("err");
     try { const h = await api("/health"); if (!h.ok || !h.workers) throw 0; }
     catch (e) { err.textContent = "We cannot reach the study server right now. Please try again in a moment or contact the researcher."; return; }
+    S.tStart = performance.now(); S.startedAt = new Date().toISOString(); S.timing = {};
     S.order = shuffle(COLORS); S.i = 0; S.answers = []; naming();
   };
   document.getElementById("go").onclick = go;
@@ -187,7 +188,8 @@ function naming() {
     if (!v) { err.textContent = "Please type a name."; return; }
     if (/[^\x20-\x7E]/.test(v)) { err.textContent = "Please type the name in English."; return; }
     S.answers.push({ k: c.k, hex: c.hex, name: v.toLowerCase(), ms: Math.round(performance.now() - S.t0) });
-    S.i++; S.i < n ? naming() : submitNaming();
+    S.i++; if (S.i >= n) S.timing.naming_ms = Math.round(performance.now() - S.tStart);
+    S.i < n ? naming() : submitNaming();
   };
   document.getElementById("next").onclick = next;
   inp.onkeydown = e => { if (e.key === "Enter") next(); };
@@ -229,6 +231,7 @@ const QUESTIONS = [
   { id: "cvd", q: "Have you ever been diagnosed with color vision deficiency (color blindness)?", opts: ["No", "Yes"] } ];
 
 function survey(k) {
+  if (k === 0) S.tSurvey = performance.now();
   const total = QUESTIONS.length + PLATES.length;
   if (k < QUESTIONS.length) {
     const Q = QUESTIONS[k];
@@ -278,7 +281,9 @@ function drawPlate(cv, P) {
 }
 
 async function afterSurvey() {
-  S.sends = [sheet({ type: "naming", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(), at: new Date().toISOString(), v: VERSION })];
+  S.timing.survey_ms = Math.round(performance.now() - S.tSurvey);
+  S.sends = [sheet({ type: "naming", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(),
+                     timing: Object.assign({ started_at: S.startedAt }, S.timing), at: new Date().toISOString(), v: VERSION })];
   S.trial = 0; S.shown = {}; nextTrial();
 }
 
@@ -291,6 +296,7 @@ async function nextTrial() {
 }
 
 function waiting(T) {
+  if (!S.waitStart) S.waitStart = performance.now();                  // time spent waiting before this item
   const done = Object.keys(S.ours).length;
   view(`${header("Preparing images")}
   <h1>We are generating images in your colors.</h1>
@@ -309,6 +315,7 @@ function waiting(T) {
 }
 
 function trial(T) {
+  S.waitMs = S.waitStart ? Math.round(performance.now() - S.waitStart) : 0; S.waitStart = 0; S.tTrial = performance.now();
   const n = TRIALS.length;
   if (!S.shown[T.id]) S.shown[T.id] = shuffle(["ours"].concat(BASELINES));
   S.pick = [];
@@ -339,6 +346,7 @@ function trial(T) {
   document.getElementById("reset").onclick = () => { S.pick = []; paint(); };
   next.onclick = () => {
     S.sends = (S.sends || []).concat(sheet({ type: "rank", pid: S.pid, job: S.job, trial: T.id, object: T.object, color: T.color, rank: S.pick.slice(), shown: order.slice(),
+            ms: Math.round(performance.now() - S.tTrial), wait_ms: S.waitMs, elapsed_ms: Math.round(performance.now() - S.tStart),
             at: new Date().toISOString(), v: VERSION }));                         // sent in the background
     S.ranks = Object.assign(S.ranks || {}, { [T.id]: S.pick.slice() }); S.trial++; nextTrial();
   };
