@@ -75,6 +75,10 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--warm); outl
   -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rainbow {
   background-image: linear-gradient(90deg, #FF6B6B, #FF9F43, #FECA57, #48DB71, #54A0FF, #7F8CFF, #C56CF0); } }
+ul.checks.emoji { list-style: none; padding-left: 0; gap: 8px; }
+ul.checks.emoji li { display: flex; gap: 10px; align-items: flex-start; }
+ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: center; }
+.pidtag { font-family: var(--mono); font-weight: 500; }
 .choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .choice { background: var(--bg); color: var(--fg); border: 1.5px solid var(--line); text-align: left; padding: 11px 14px; font-weight: 400; }
 .choice.on { border-color: var(--accent); background: var(--soft); font-weight: 500; }
@@ -137,34 +141,32 @@ const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + "
 
 /* ---------------- start ---------------- */
 function home() {
+  if (!S.pid) S.pid = "P" + Date.now().toString(36).slice(-4).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();   // random participant ID
   view(`${header("About 10 min")}
   <h1>The same color word can mean slightly different colors to different people.</h1>
   <p class="rainbow">Color is a really fascinating topic, especially since we’re taught so many different and often contradictory ideas about rainbows, different primary colors, and frequencies of light.</p>
   <p class="muted">In this study, we learn how you name colors and test whether images can be generated in the colors you have in mind. You will name a few colors, answer a short survey, and then rank images, all in one session.</p>
   <div class="card">
     <h2>Before you start</h2>
-    <ul class="checks">
-      <li>Keep your screen brightness at its usual level, and turn off night mode or any blue-light filter.</li>
-      <li>Seven colors will appear one at a time. Type the name that comes to mind, <b>in English</b>.</li>
-      <li>There are no right or wrong answers. Use the name you would normally use.</li>
+    <ul class="checks emoji">
+      <li><span aria-hidden="true">🔆</span><span>Keep your screen brightness at its usual level, and turn off night mode or any blue-light filter.</span></li>
+      <li><span aria-hidden="true">🎨</span><span>Seven colors will appear one at a time. Type the name that comes to mind, <b>in English</b>.</span></li>
+      <li><span aria-hidden="true">💬</span><span>There are no right or wrong answers. Use the name you would normally use.</span></li>
     </ul>
     <div class="ex"><span class="muted">Examples</span><span><b>blue</b>, <b>light green</b>, <b>salmon</b>, <b>dusty rose</b>, <b>mustard yellow</b></span></div>
   </div>
   <div class="card">
-    <label for="pid">Participant ID</label>
-    <input type="text" id="pid" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., P07" value="${esc(ls.get("pid") || "")}">
+    <p class="muted" style="font-size:14px">Your participant ID: <b class="pidtag">${esc(S.pid)}</b></p>
     <div class="err" id="err"></div>
     <div class="btns"><button class="primary" id="go">Start</button></div>
   </div>`);
   const go = async () => {
-    const v = document.getElementById("pid").value.trim(), err = document.getElementById("err");
-    if (!/^[A-Za-z0-9_-]{2,20}$/.test(v)) { err.textContent = "Please use 2–20 letters or digits."; return; }
+    const err = document.getElementById("err");
     try { const h = await api("/health"); if (!h.ok || !h.workers) throw 0; }
     catch (e) { err.textContent = "We cannot reach the study server right now. Please try again in a moment or contact the researcher."; return; }
-    S.pid = v; ls.set("pid", v); S.order = shuffle(COLORS); S.i = 0; S.answers = []; naming();
+    S.order = shuffle(COLORS); S.i = 0; S.answers = []; naming();
   };
   document.getElementById("go").onclick = go;
-  document.getElementById("pid").onkeydown = e => { if (e.key === "Enter") go(); };
 }
 
 /* ---------------- 1. naming ---------------- */
