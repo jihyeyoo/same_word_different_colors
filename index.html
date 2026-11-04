@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Color Your Names</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: one narrow column, one task at a time; the color stage is a fixed neutral grey in both themes */
 :root {
@@ -13,7 +12,7 @@
   --accent: #2C3B4D; --accent-fg: #FFFFFF; --warm: #A35139; --soft: #EEE9DF;
   --stage: #808080; --stage-line: #6E6E6E;
   --sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --mono: var(--sans);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #161D26; --surface: #1F2934; --fg: #ECE7DD; --muted: #A3ABB5; --line: #33404E;
@@ -85,7 +84,7 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 .plate { width: min(72vw, 280px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; background: #fff; }
 .plate-stage { background: #F2F0EA; border-radius: 14px; padding: 20px; display: grid; place-items: center; }
 .wait { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.clock { font-family: var(--mono); font-size: 34px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.clock { font-family: var(--mono); font-feature-settings: "tnum"; font-size: 34px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
 </style>
 </head>
