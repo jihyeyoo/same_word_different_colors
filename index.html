@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -85,6 +85,17 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 .plate-stage { background: #F2F0EA; border-radius: 14px; padding: 20px; display: grid; place-items: center; }
 .wait { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .clock { font-family: var(--mono); font-feature-settings: "tnum"; font-size: 34px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.grp { display: flex; flex-direction: column; gap: 6px; }
+.grp-h { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: 14px; font-weight: 400; padding: 6px 10px; border-radius: 999px; background: var(--bg); color: var(--fg); border: 1.5px solid var(--line); }
+.chip small { color: var(--muted); margin-left: 4px; font-size: 12px; }
+.chip.on { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.chip.on small { color: var(--accent-fg); opacity: .8; }
+.picked { font-size: 15px; } .picked b { font-weight: 600; }
+.ko { font-size: 13px; color: var(--muted); }
+.ab { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ab .opt .tag { font-size: 14px; padding: 3px 9px; }
 @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
 </style>
 </head>
@@ -92,25 +103,39 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 <div class="wrap" id="app" aria-live="polite"></div>
 
 <script>
-/* One session: ID -> name 7 colors -> (our images are generated on the study server meanwhile) -> short survey with a simple
-   color-vision check -> wait if needed -> rank 10 trials (ours + 4 baselines). Responses go to the Google Sheet (apps_script.gs).
+/* One session: ID -> name 7 colors (pick an English color word, Korean gloss shown; or type another English name) -> our images
+   are generated on the study server meanwhile (SD 3.5 and FLUX.2, both guided toward the participant's predicted colors) ->
+   short survey with a simple color-vision check -> 18 A/B choices (9 prompts x 2 generators: unguided vs. guided, same seed,
+   random sides). Responses go to the Google Sheet (apps_script.gs: naming rows; A/B rows use the "rank" sheet).
    Patch colors: XKCD population mean (CIELAB) of peach, teal, lavender, maroon, gold, magenta, beige; the words are never shown. */
 const COLORS = [
   { k: "c1", hex: "#EFA578" }, { k: "c2", hex: "#47B29E" }, { k: "c3", hex: "#B480D0" }, { k: "c4", hex: "#832437" },
   { k: "c5", hex: "#CFB02D" }, { k: "c6", hex: "#CB2E97" }, { k: "c7", hex: "#D5C085" } ];
-const TRIALS = [
-  { id: "t01", color: "peach", object: "sweater" }, { id: "t02", color: "teal", object: "vase" },
-  { id: "t03", color: "lavender", object: "dress" }, { id: "t04", color: "maroon", object: "chair" },
-  { id: "t05", color: "gold", object: "coin" }, { id: "t06", color: "magenta", object: "umbrella" },
-  { id: "t07", color: "beige", object: "sofa" }, { id: "t08", color: "teal", object: "car" },
-  { id: "t09", color: "peach", object: "bowl" }, { id: "t10", color: "maroon", object: "door" } ];
-const BASELINES = ["sd35", "flux", "richtext", "colorwave"];       // images/<trial>/<key>.jpg (participant-independent)
-const VERSION = "cs2";
+const PALETTE = [                                                    // all in the predictor's 1,000-name vocabulary
+  ["빨강 계열", [["red","빨강"],["dark red","진한 빨강"],["bright red","밝은 빨강"],["crimson","진홍"],["scarlet","주홍빛 빨강"],["cherry red","체리색"],["burgundy","버건디"],["maroon","적갈색"],["wine","와인색"],["brick red","벽돌색"]]],
+  ["분홍 계열", [["pink","분홍"],["light pink","연분홍"],["pale pink","옅은 분홍"],["hot pink","진분홍"],["rose","장밋빛"],["dusty rose","탁한 장밋빛"],["salmon","연어색"],["coral","산호색"],["peach","복숭아색"],["magenta","자홍"],["fuchsia","푸크시아"],["mauve","연보라빛 분홍"]]],
+  ["주황 계열", [["orange","주황"],["light orange","연주황"],["dark orange","진주황"],["burnt orange","탁한 주황"],["tangerine","귤색"],["apricot","살구색"],["rust","녹슨 주황"]]],
+  ["갈색 계열", [["brown","갈색"],["light brown","연갈색"],["dark brown","진갈색"],["tan","황갈색"],["beige","베이지"],["khaki","카키"],["chocolate","초콜릿색"],["coffee","커피색"],["caramel","캐러멜색"],["sienna","시에나"]]],
+  ["노랑 계열", [["yellow","노랑"],["light yellow","연노랑"],["pale yellow","옅은 노랑"],["lemon","레몬색"],["mustard","겨자색"],["gold","금색"],["cream","크림색"],["yellow green","연두"]]],
+  ["초록 계열", [["green","초록"],["light green","연초록"],["dark green","진초록"],["lime green","라임 그린"],["lime","라임"],["olive","올리브"],["olive green","올리브 그린"],["mint","민트"],["sea green","바다빛 초록"],["forest green","숲 초록"],["grass green","풀색"],["kelly green","켈리 그린"],["emerald","에메랄드"],["sage","세이지"]]],
+  ["파랑 계열", [["blue","파랑"],["light blue","연파랑"],["dark blue","진파랑"],["navy","남색"],["navy blue","네이비 블루"],["royal blue","로열 블루"],["sky blue","하늘색"],["baby blue","연하늘색"],["cobalt","코발트"],["teal","청록"],["turquoise","터키석색"],["aqua","아쿠아"],["cyan","시안"],["periwinkle","연보랏빛 파랑"],["cornflower","수레국화색"],["steel blue","강철빛 파랑"]]],
+  ["보라 계열", [["purple","보라"],["light purple","연보라"],["dark purple","진보라"],["violet","바이올렛"],["lavender","라벤더"],["lilac","라일락"],["plum","자두색"],["indigo","남보라"],["orchid","난초색"],["grape","포도색"]]],
+  ["무채색", [["gray","회색"],["light gray","연회색"],["dark gray","진회색"],["silver","은색"],["charcoal","숯색"],["slate","청회색"],["black","검정"],["white","흰색"],["off-white","미색"]]] ];
+const KO = Object.fromEntries(PALETTE.flatMap(g => g[1]));
+const PROMPTS = [                                                    // trials_ab.json (seed 0); unguided: images_ab/<id>/<gen>.jpg
+  { id: "c01", color: "red", object: "사과" }, { id: "c03", color: "blue", object: "청바지" },
+  { id: "c04", color: "brown", object: "초콜릿" }, { id: "c05", color: "orange", object: "호박" },
+  { id: "c06", color: "gold", object: "동전" }, { id: "c07", color: "yellow", object: "달" },
+  { id: "c09", color: "green", object: "나뭇잎" }, { id: "c12", color: "emerald", object: "보석" },
+  { id: "c13", color: "pink", object: "돼지 저금통" } ];
+const GENS = ["sd35", "flux"];
+const ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));   // 18 A/B items
+const VERSION = "ab1";
 const ENDPOINT = "https://script.google.com/macros/s/AKfycbwCvTPmdHTpjzjaPpZdl-j-OjecBMxxow6NTYnPsXauXDs4bW_SNbMGTN_sO14J0y8W/exec";
 let SERVER = "";                                                    // from config.json (the study server's public address)
 
 const app = document.getElementById("app");
-const S = { pid: "", order: [], i: 0, answers: [], t0: 0, job: "", survey: {}, ours: {}, eta: 0, etaAt: 0, trial: 0, pick: [], shown: {} };
+const S = { pid: "", order: [], i: 0, answers: [], t0: 0, job: "", survey: {}, ours: {}, eta: 0, etaAt: 0, queue: [], done: 0, sides: {}, choices: {} };
 const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
              set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -136,58 +161,68 @@ async function api(path, body) {                                    // the study
 }
 function view(html) { app.innerHTML = html; window.scrollTo(0, 0); }
 const header = step => `<header><span class="brand">🎨 Color Your Names</span><span class="step">${esc(step)}</span></header>`;
-const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0") + " s"; };
+const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + "분 " + String(s % 60).padStart(2, "0") + "초"; };
 
 /* ---------------- start ---------------- */
 function home() {
   if (!S.pid) S.pid = "P" + Date.now().toString(36).slice(-4).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();   // random participant ID
-  view(`${header("About 10 min")}
+  view(`${header("약 15분")}
   <h1>The same color word can mean slightly different colors to different people.</h1>
-  <p class="rainbow">Color is a really fascinating topic, especially since we’re taught so many different and often contradictory ideas about rainbows, different primary colors, and frequencies of light.</p>
-  <p class="muted">In this study, we learn how you name colors and test whether images can be generated in the colors you have in mind. You will name a few colors, answer a short survey, and then rank images, all in one session.</p>
+  <div><p class="rainbow">Color is a really fascinating topic, especially since we’re taught so many different and often contradictory ideas about rainbows, different primary colors, and frequencies of light.</p>
+  <p class="ko">색은 정말 흥미로운 주제예요. 무지개, 서로 다른 삼원색, 빛의 주파수에 대해 우리는 저마다 다르고 때로는 서로 모순되는 이야기들을 배우니까요.</p></div>
+  <p class="muted">이 연구에서는 여러분이 색에 이름을 붙이는 방식을 알아보고, 여러분이 떠올리는 색으로 이미지를 만들 수 있는지 확인합니다. 색 이름 붙이기, 짧은 설문, 이미지 비교 순서로 한 번에 진행됩니다.</p>
   <div class="card">
-    <h2>Before you start</h2>
+    <h2>시작하기 전에</h2>
     <ul class="checks emoji">
-      <li><span aria-hidden="true">🔆</span><span>Keep your screen brightness at its usual level, and turn off night mode or any blue-light filter.</span></li>
-      <li><span aria-hidden="true">🎨</span><span>Seven colors will appear one at a time. Type the name that comes to mind, <b>in English</b>.</span></li>
-      <li><span aria-hidden="true">💬</span><span>There are no right or wrong answers. Use the name you would normally use.</span></li>
+      <li><span aria-hidden="true">🔆</span><span>화면 밝기는 평소대로 두고, 야간 모드나 블루라이트 필터는 꺼 주세요.</span></li>
+      <li><span aria-hidden="true">🎨</span><span>색 7개가 하나씩 나옵니다. 각 색을 가장 잘 나타내는 <b>영어 색 이름</b>을 목록에서 골라 주세요. 목록에 없으면 직접 입력할 수 있어요.</span></li>
+      <li><span aria-hidden="true">💬</span><span>정답은 없습니다. 평소 그 색을 부르는 이름을 골라 주세요.</span></li>
     </ul>
-    <div class="ex"><span class="muted">Examples</span><span><b>blue</b>, <b>light green</b>, <b>salmon</b>, <b>dusty rose</b>, <b>mustard yellow</b></span></div>
   </div>
   <div class="card">
-    <p class="muted" style="font-size:14px">Your participant ID: <b class="pidtag">${esc(S.pid)}</b></p>
+    <p class="muted" style="font-size:14px">참가자 ID: <b class="pidtag">${esc(S.pid)}</b></p>
     <div class="err" id="err"></div>
-    <div class="btns"><button class="primary" id="go">Start</button></div>
+    <div class="btns"><button class="primary" id="go">시작하기</button></div>
   </div>`);
   const go = async () => {
     const err = document.getElementById("err");
     try { const h = await api("/health"); if (!h.ok || !h.workers) throw 0; }
-    catch (e) { err.textContent = "We cannot reach the study server right now. Please try again in a moment or contact the researcher."; return; }
+    catch (e) { err.textContent = "지금은 연구 서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 연구자에게 문의해 주세요."; return; }
     S.tStart = performance.now(); S.startedAt = new Date().toISOString(); S.timing = {};
     S.order = shuffle(COLORS); S.i = 0; S.answers = []; naming();
   };
   document.getElementById("go").onclick = go;
 }
 
-/* ---------------- 1. naming ---------------- */
+/* ---------------- 1. naming: pick an English color word (Korean gloss) or type another English name ---------------- */
 function naming() {
-  const c = S.order[S.i], n = S.order.length;
-  view(`${header(`Color ${S.i + 1} of ${n}`)}
+  const c = S.order[S.i], n = S.order.length; let pick = "";
+  view(`${header(`색 ${S.i + 1} / ${n}`)}
   <div class="bar"><i style="width:${(S.i / n) * 100}%"></i></div>
-  <div class="stage"><div class="patch" style="background:${c.hex}" role="img" aria-label="Color sample ${S.i + 1}"></div></div>
+  <div class="stage"><div class="patch" style="background:${c.hex}" role="img" aria-label="색 샘플 ${S.i + 1}"></div></div>
   <div class="card">
-    <label for="nm">What would you call this color?</label>
-    <input type="text" id="nm" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., light green">
+    <label>이 색을 영어로 뭐라고 부르시겠어요?</label>
+    <p class="picked" id="picked"><span class="muted">아래에서 하나를 골라 주세요.</span></p>
+    ${PALETTE.map(([g, ws]) => `<div class="grp"><span class="grp-h">${esc(g)}</span><div class="chips">${ws.map(([w, k]) =>
+      `<button class="chip" data-w="${esc(w)}">${esc(w)}<small>${esc(k)}</small></button>`).join("")}</div></div>`).join("")}
+    <div class="grp"><span class="grp-h">기타 (목록에 없으면 영어로 직접 입력)</span>
+      <input type="text" id="nm" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: dusty blue"></div>
     <div class="err" id="err"></div>
-    <div class="btns"><button class="primary" id="next">${S.i + 1 < n ? "Next" : "Done"}</button></div>
+    <div class="btns"><button class="primary" id="next">${S.i + 1 < n ? "다음" : "완료"}</button></div>
   </div>`);
   S.t0 = performance.now();
-  const inp = document.getElementById("nm"); inp.focus({ preventScroll: true });
+  const inp = document.getElementById("nm"), shown = document.getElementById("picked");
+  const paint = () => {
+    app.querySelectorAll(".chip").forEach(b => b.classList.toggle("on", b.dataset.w === pick));
+    shown.innerHTML = pick ? `선택: <b>${esc(pick)}</b>${KO[pick] ? ` <span class="muted">(${esc(KO[pick])})</span>` : ""}` : `<span class="muted">아래에서 하나를 골라 주세요.</span>`;
+  };
+  app.querySelectorAll(".chip").forEach(b => b.onclick = () => { pick = b.dataset.w; inp.value = ""; paint(); });
+  inp.oninput = () => { pick = inp.value.trim().toLowerCase(); paint(); };
   const next = () => {
-    const v = inp.value.trim(), err = document.getElementById("err");
-    if (!v) { err.textContent = "Please type a name."; return; }
-    if (/[^\x20-\x7E]/.test(v)) { err.textContent = "Please type the name in English."; return; }
-    S.answers.push({ k: c.k, hex: c.hex, name: v.toLowerCase(), ms: Math.round(performance.now() - S.t0) });
+    const err = document.getElementById("err");
+    if (!pick) { err.textContent = "색 이름을 하나 골라 주세요."; return; }
+    if (/[^\x20-\x7E]/.test(pick)) { err.textContent = "직접 입력할 때는 영어로 적어 주세요."; return; }
+    S.answers.push({ k: c.k, hex: c.hex, name: pick, typed: !KO[pick], ms: Math.round(performance.now() - S.t0) });
     S.i++; if (S.i >= n) S.timing.naming_ms = Math.round(performance.now() - S.tStart);
     S.i < n ? naming() : submitNaming();
   };
@@ -196,14 +231,14 @@ function naming() {
 }
 
 async function submitNaming() {
-  view(`${header("One moment")}<h1>Sending your answers…</h1>`);
+  view(`${header("잠시만요")}<h1>답변을 보내는 중입니다…</h1>`);
   for (let t = 0; t < 3 && !S.job; t++) {
     try { const r = await api("/submit", { pid: S.pid, answers: S.answers.map(a => ({ hex: a.hex, name: a.name })) }); S.job = r.job; setEta(r.eta_s); }
     catch (e) { await sleep(1500); }
   }
   if (!S.job) {
-    view(`${header("Connection error")}<h1>Your answers could not be sent to the study server.</h1>
-    <div class="card"><p class="muted">Please check your internet connection and try again.</p><div class="btns"><button class="primary" id="re">Try again</button></div></div>`);
+    view(`${header("연결 오류")}<h1>답변을 연구 서버로 보내지 못했습니다.</h1>
+    <div class="card"><p class="muted">인터넷 연결을 확인하고 다시 시도해 주세요.</p><div class="btns"><button class="primary" id="re">다시 시도</button></div></div>`);
     document.getElementById("re").onclick = submitNaming; return;
   }
   ls.set("job_" + S.pid, S.job); poll(); survey(0);
@@ -213,7 +248,7 @@ async function submitNaming() {
 function setEta(s) { S.eta = s; S.etaAt = Date.now(); }
 const etaLeft = () => Math.max(0, S.eta - (Date.now() - S.etaAt) / 1000);
 async function poll() {
-  while (Object.keys(S.ours).length < TRIALS.length) {
+  while (Object.keys(S.ours).length < ITEMS.length) {
     try { const r = await api("/status?job=" + S.job);
       for (const [k, u] of Object.entries(r.images)) S.ours[k] = SERVER + u;
       if (Math.abs(r.eta_s - etaLeft()) > 5) setEta(r.eta_s); } catch (e) {}
@@ -226,17 +261,17 @@ const PLATES = [                                                    // simple ps
   { id: "p0", digit: "12", kind: "control" }, { id: "p1", digit: "8", kind: "rg" },
   { id: "p2", digit: "29", kind: "rg" }, { id: "p3", digit: "74", kind: "rg" } ];
 const QUESTIONS = [
-  { id: "age", q: "What is your age group?", opts: ["Under 20", "20–29", "30–39", "40–49", "50–59", "60–69", "70 or older"] },
-  { id: "device", q: "Which device are you using right now?", opts: ["Phone", "Tablet", "Laptop", "Desktop monitor"] },
-  { id: "cvd", q: "Have you ever been diagnosed with color vision deficiency (color blindness)?", opts: ["No", "Yes"] } ];
+  { id: "age", q: "연령대를 선택해 주세요.", opts: ["20세 미만", "20–29세", "30–39세", "40–49세", "50–59세", "60–69세", "70세 이상"] },
+  { id: "device", q: "지금 어떤 기기를 사용하고 계신가요?", opts: ["스마트폰", "태블릿", "노트북", "데스크톱 모니터"] },
+  { id: "cvd", q: "색각 이상(색맹·색약) 진단을 받은 적이 있나요?", opts: ["아니요", "예"] } ];
 
 function survey(k) {
   if (k === 0) S.tSurvey = performance.now();
   const total = QUESTIONS.length + PLATES.length;
   if (k < QUESTIONS.length) {
     const Q = QUESTIONS[k];
-    view(`${header(`Question ${k + 1} of ${total}`)}
-    <p class="muted">While we generate your images, here are a few short questions.</p>
+    view(`${header(`질문 ${k + 1} / ${total}`)}
+    <p class="muted">이미지를 만드는 동안 몇 가지만 여쭤볼게요.</p>
     <div class="card"><h2>${esc(Q.q)}</h2>
       <div class="choices">${Q.opts.map(o => `<button class="choice" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>`);
     app.querySelectorAll(".choice").forEach(b => b.onclick = () => { S.survey[Q.id] = b.dataset.v; survey(k + 1); });
@@ -245,13 +280,13 @@ function survey(k) {
   const j = k - QUESTIONS.length;
   if (j >= PLATES.length) return afterSurvey();
   const P = PLATES[j];
-  view(`${header(`Question ${k + 1} of ${total}`)}
-  <div class="card"><h2>Quick color vision check</h2>
-    <p class="muted" style="font-size:14px">Type the number you see in the circle. If you see no number, tap "I see none". (This is for reference only, not a diagnosis.)</p></div>
-  <div class="plate-stage"><canvas class="plate" id="plate" width="560" height="560" aria-label="Color vision plate ${j + 1}"></canvas></div>
+  view(`${header(`질문 ${k + 1} / ${total}`)}
+  <div class="card"><h2>간단한 색각 확인</h2>
+    <p class="muted" style="font-size:14px">원 안에 보이는 숫자를 입력해 주세요. 숫자가 보이지 않으면 "보이지 않음"을 눌러 주세요. (참고용이며 진단이 아닙니다.)</p></div>
+  <div class="plate-stage"><canvas class="plate" id="plate" width="560" height="560" aria-label="색각 검사판 ${j + 1}"></canvas></div>
   <div class="card">
-    <input type="text" id="ans" inputmode="numeric" autocomplete="off" placeholder="Number">
-    <div class="btns"><button class="ghost" id="none">I see none</button><button class="primary" id="ok">Next</button></div>
+    <input type="text" id="ans" inputmode="numeric" autocomplete="off" placeholder="숫자">
+    <div class="btns"><button class="ghost" id="none">보이지 않음</button><button class="primary" id="ok">다음</button></div>
   </div>`);
   drawPlate(document.getElementById("plate"), P);
   const done = v => { S.survey["plate_" + P.id] = { digit: P.digit, answer: v }; survey(k + 1); };
@@ -259,7 +294,6 @@ function survey(k) {
   document.getElementById("none").onclick = () => done("none");
   document.getElementById("ans").onkeydown = e => { if (e.key === "Enter" && e.target.value.trim()) done(e.target.value.trim()); };
 }
-
 function drawPlate(cv, P) {
   const ctx = cv.getContext("2d"), W = cv.width, R = W / 2 - 6;
   const mask = document.createElement("canvas"); mask.width = mask.height = W; const m = mask.getContext("2d");
@@ -284,84 +318,70 @@ async function afterSurvey() {
   S.timing.survey_ms = Math.round(performance.now() - S.tSurvey);
   S.sends = [sheet({ type: "naming", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(),
                      timing: Object.assign({ started_at: S.startedAt }, S.timing), at: new Date().toISOString(), v: VERSION })];
-  S.trial = 0; S.shown = {}; nextTrial();
+  S.queue = shuffle(ITEMS.filter(x => x.gen === "sd35")).concat(shuffle(ITEMS.filter(x => x.gen === "flux")));   // SD 3.5 images are ready first
+  S.done = 0; nextItem();
 }
 
-/* ---------------- 3. ranking ---------------- */
-async function nextTrial() {
-  if (S.trial >= TRIALS.length) return finish();
-  const T = TRIALS[S.trial];
-  if (!S.ours[T.id]) return waiting(T);
-  trial(T);
+/* ---------------- 3. A/B choices ---------------- */
+function nextItem() {
+  if (!S.queue.length) return finish();
+  const j = S.queue.findIndex(x => S.ours[x.key]);                   // the first item whose guided image is ready
+  if (j < 0) return waiting();
+  const [it] = S.queue.splice(j, 1); ab(it);
 }
 
-function waiting(T) {
+function waiting() {
   if (!S.waitStart) S.waitStart = performance.now();                  // time spent waiting before this item
-  const done = Object.keys(S.ours).length;
-  view(`${header("Preparing images")}
-  <h1>We are generating images in your colors.</h1>
+  const total = ITEMS.length, made = () => Object.keys(S.ours).length;
+  view(`${header("이미지 준비 중")}
+  <h1>여러분의 색으로 이미지를 만들고 있어요.</h1>
   <div class="card">
-    <div class="wait"><span class="clock" id="clock">${fmt(etaLeft())}</span><span class="muted">left. Please wait a moment.</span></div>
-    <div class="bar"><i id="pg" style="width:${done * 10}%"></i></div>
-    <p class="muted" style="font-size:14px" id="cnt">${done} / ${TRIALS.length} done · Please keep this page open.</p>
+    <div class="wait"><span class="clock" id="clock">${fmt(etaLeft())}</span><span class="muted">남았습니다. 잠시만 기다려 주세요.</span></div>
+    <div class="bar"><i id="pg" style="width:${made() / total * 100}%"></i></div>
+    <p class="muted" style="font-size:14px" id="cnt">${made()} / ${total} 완료 · 이 페이지를 닫지 말아 주세요.</p>
   </div>`);
   const tick = setInterval(() => {
     const c = document.getElementById("clock"); if (!c) return clearInterval(tick);
-    const left = etaLeft(); c.textContent = left > 0 ? fmt(left) : "Almost done";
-    const d = Object.keys(S.ours).length; document.getElementById("pg").style.width = d * 10 + "%";
-    document.getElementById("cnt").textContent = `${d} / ${TRIALS.length} done · Please keep this page open.`;
-    if (S.ours[T.id]) { clearInterval(tick); trial(T); }
+    const left = etaLeft(); c.textContent = left > 0 ? fmt(left) : "거의 다 됐어요";
+    document.getElementById("pg").style.width = made() / total * 100 + "%";
+    document.getElementById("cnt").textContent = `${made()} / ${total} 완료 · 이 페이지를 닫지 말아 주세요.`;
+    if (S.queue.some(x => S.ours[x.key])) { clearInterval(tick); nextItem(); }
   }, 1000);
 }
 
-function trial(T) {
-  S.waitMs = S.waitStart ? Math.round(performance.now() - S.waitStart) : 0; S.waitStart = 0; S.tTrial = performance.now();
-  const n = TRIALS.length;
-  if (!S.shown[T.id]) S.shown[T.id] = shuffle(["ours"].concat(BASELINES));
-  S.pick = [];
-  const order = S.shown[T.id];
-  const src = k => k === "ours" ? S.ours[T.id] : `images/${T.id}/${k}.jpg`;
-  view(`${header(`Item ${S.trial + 1} of ${n}`)}
-  <div class="bar"><i style="width:${(S.trial / n) * 100}%"></i></div>
+function ab(it) {
+  S.waitMs = S.waitStart ? Math.round(performance.now() - S.waitStart) : 0; S.waitStart = 0; S.tItem = performance.now();
+  const n = ITEMS.length, sides = shuffle(["guided", "unguided"]); S.sides[it.key] = sides;
+  const src = k => k === "guided" ? S.ours[it.key] : `images_ab/${it.id}/${it.gen}.jpg`;
+  view(`${header(`비교 ${S.done + 1} / ${n}`)}
+  <div class="bar"><i style="width:${(S.done / n) * 100}%"></i></div>
   <div class="card">
-    <p class="q">Which <em>${esc(T.object)}</em> in the image is closer to your <em>${esc(T.color)}</em>?</p>
-    <p class="muted" style="font-size:14px">Tap the images in order, starting with the one closest to what <b>${esc(T.color)}</b> means to you. When all images are ranked, you can continue.</p>
+    <p class="q">어느 쪽 <em>${esc(it.object)}</em>가 여러분이 생각하는 <em>${esc(it.color)}</em>에 더 가까운가요?</p>
+    <p class="muted" style="font-size:14px">두 이미지 중 하나를 눌러 주세요. <b>${esc(it.color)}</b>(${esc(KO[it.color] || "")})라는 단어를 들었을 때 떠오르는 색을 기준으로 골라 주세요.</p>
   </div>
-  <div class="grid n${order.length}" id="grid">${order.map((k, j) => `
-    <button class="opt" data-k="${esc(k)}" aria-label="Image ${String.fromCharCode(65 + j)}">
-      <img src="${esc(src(k))}" alt=""><span class="tag">${String.fromCharCode(65 + j)}</span></button>`).join("")}
-  </div>
-  <div class="btns"><button class="ghost" id="reset">Reset</button><button class="primary" id="next" disabled>${S.trial + 1 < n ? "Next" : "Done"}</button></div>`);
-  const grid = document.getElementById("grid"), next = document.getElementById("next");
-  const paint = () => {
-    grid.querySelectorAll(".opt").forEach(b => {
-      const r = S.pick.indexOf(b.dataset.k); b.classList.toggle("on", r >= 0);
-      const old = b.querySelector(".rk"); if (old) old.remove();
-      if (r >= 0) b.insertAdjacentHTML("beforeend", `<span class="rk">${r + 1}</span>`);
-    });
-    next.disabled = S.pick.length !== order.length;
-  };
-  grid.onclick = e => { const b = e.target.closest(".opt"); if (!b) return; const k = b.dataset.k;
-    const r = S.pick.indexOf(k); r >= 0 ? S.pick.splice(r, 1) : S.pick.push(k); paint(); };
-  document.getElementById("reset").onclick = () => { S.pick = []; paint(); };
-  next.onclick = () => {
-    S.sends = (S.sends || []).concat(sheet({ type: "rank", pid: S.pid, job: S.job, trial: T.id, object: T.object, color: T.color, rank: S.pick.slice(), shown: order.slice(),
-            ms: Math.round(performance.now() - S.tTrial), wait_ms: S.waitMs, elapsed_ms: Math.round(performance.now() - S.tStart),
-            at: new Date().toISOString(), v: VERSION }));                         // sent in the background
-    S.ranks = Object.assign(S.ranks || {}, { [T.id]: S.pick.slice() }); S.trial++; nextTrial();
+  <div class="ab" id="ab">${sides.map((k, j) => `
+    <button class="opt" data-k="${k}" aria-label="이미지 ${"AB"[j]}"><img src="${esc(src(k))}" alt=""><span class="tag">${"AB"[j]}</span></button>`).join("")}
+  </div>`);
+  document.getElementById("ab").onclick = e => {
+    const b = e.target.closest(".opt"); if (!b) return; const choice = b.dataset.k;
+    S.choices[it.key] = choice;
+    S.sends = (S.sends || []).concat(sheet({ type: "rank", pid: S.pid, job: S.job, trial: it.key, gen: it.gen, prompt: it.id, object: it.object, color: it.color,
+            rank: [choice], shown: sides.slice(), choice, ms: Math.round(performance.now() - S.tItem), wait_ms: S.waitMs,
+            elapsed_ms: Math.round(performance.now() - S.tStart), at: new Date().toISOString(), v: VERSION }));   // sent in the background
+    S.done++; nextItem();
   };
 }
 
 async function finish() {
-  view(`${header("Saving")}<h1>Saving your responses…</h1><p class="muted">Please keep this page open.</p>`);
+  view(`${header("저장 중")}<h1>응답을 저장하고 있어요…</h1><p class="muted">이 페이지를 닫지 말아 주세요.</p>`);
   const ok = (await Promise.all(S.sends || [])).every(Boolean);
-  if (ok) return view(`${header("Done")}
-    <h1>You have finished. Thank you for taking part!</h1>
-    <div class="card"><p>Your responses have been saved. You may now close this page.</p></div>`);
-  const code = encode({ pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, shown: S.shown, ranks: S.ranks, v: VERSION });
-  view(`${header("Please check")}
-    <h1>Some responses may not have been saved.</h1>
-    <div class="card"><p class="muted">Please copy the code below and send it to the researcher.</p><div class="code">${esc(code)}</div></div>`);
+  if (ok) return view(`${header("완료")}
+    <h1>모두 끝났습니다. 참여해 주셔서 감사합니다!</h1>
+    <div class="card"><p>응답이 저장되었습니다. 이제 페이지를 닫으셔도 됩니다.</p></div>`);
+  const code = encode({ pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, sides: S.sides, choices: S.choices, v: VERSION });
+  view(`${header("확인 필요")}
+    <h1>일부 응답이 저장되지 않았을 수 있습니다.</h1>
+    <div class="card"><p class="muted">아래 코드를 복사해서 연구자에게 보내 주세요.</p><div class="code">${esc(code)}</div></div>`);
 }
 
 (async () => {
