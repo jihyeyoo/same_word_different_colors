@@ -129,7 +129,7 @@ const PROMPTS = [                                                    // trials_a
   { id: "c09", color: "green", object: "나뭇잎" }, { id: "c12", color: "emerald", object: "보석" },
   { id: "c13", color: "pink", object: "돼지 저금통" } ];
 const GENS = ["sd35", "flux"];
-const ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));   // 18 A/B items
+let ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));     // 18 A/B items (only the generators the server serves)
 const VERSION = "ab1";
 const ENDPOINT = "https://script.google.com/macros/s/AKfycbwCvTPmdHTpjzjaPpZdl-j-OjecBMxxow6NTYnPsXauXDs4bW_SNbMGTN_sO14J0y8W/exec";
 let SERVER = "";                                                    // from config.json (the study server's public address)
@@ -166,7 +166,7 @@ const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + "
 /* ---------------- start ---------------- */
 function home() {
   if (!S.pid) S.pid = "P" + Date.now().toString(36).slice(-4).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();   // random participant ID
-  view(`${header("약 15분")}
+  view(`${header("약 10–15분")}
   <h1>The same color word can mean slightly different colors to different people.</h1>
   <div><p class="rainbow">Color is a really fascinating topic, especially since we’re taught so many different and often contradictory ideas about rainbows, different primary colors, and frequencies of light.</p>
   <p class="ko">색은 정말 흥미로운 주제예요. 무지개, 서로 다른 삼원색, 빛의 주파수에 대해 우리는 저마다 다르고 때로는 서로 모순되는 이야기들을 배우니까요.</p></div>
@@ -186,7 +186,8 @@ function home() {
   </div>`);
   const go = async () => {
     const err = document.getElementById("err");
-    try { const h = await api("/health"); if (!h.ok || !h.workers) throw 0; }
+    try { const h = await api("/health"); if (!h.ok || !h.workers) throw 0;
+          if (h.gens) ITEMS = ITEMS.filter(x => h.gens.includes(x.gen)); }
     catch (e) { err.textContent = "지금은 연구 서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 연구자에게 문의해 주세요."; return; }
     S.tStart = performance.now(); S.startedAt = new Date().toISOString(); S.timing = {};
     S.order = shuffle(COLORS); S.i = 0; S.answers = []; naming();
