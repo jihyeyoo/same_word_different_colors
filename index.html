@@ -111,7 +111,7 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 
 <script>
 /* One session: ID -> preference context: for red, orange, green, blue and navy blue, two axis-ordered 3x3 grids each
-   (10 screens, random order): LC = rows lightness (top lighter) x columns chroma (right more saturated); HC = rows hue
+   (10 screens: red, orange, green, blue, navy with the LC grid, then the same order with the HC grid): LC = rows lightness (top lighter) x columns chroma (right more saturated); HC = rows hue
    (h0 - 18 / h0 / h0 + 18 degrees, labeled per word, e.g. purplish / orangish red) x the same chroma columns. Around a common
    shade of each word, all cells in sRGB and clearly different (code/user_study_server/pref/make_grids_axes.py).
    The picks are sent to the study server as (color, word) context pairs -> our images are generated meanwhile -> short survey
@@ -200,7 +200,7 @@ function home() {
       catch (e) { err.textContent = "지금은 연구 서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 연구자에게 문의해 주세요."; return; }
     }
     S.tStart = performance.now(); S.startedAt = new Date().toISOString(); S.timing = {};
-    S.order = shuffle(WORDS.flatMap(([w, ko]) => ["LC", "HC"].map(g => ({ w, ko, g })))); S.i = 0; S.answers = []; naming();
+    S.order = ["LC", "HC"].flatMap(g => WORDS.map(([w, ko]) => ({ w, ko, g }))); S.i = 0; S.answers = []; naming();   // red, orange, green, blue, navy (lightness), then again (hue)
   };
   document.getElementById("go").onclick = go;
 }
