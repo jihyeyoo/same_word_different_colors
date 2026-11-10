@@ -262,7 +262,7 @@ async function poll() {
   while (Object.keys(S.ours).length < ITEMS.length) {
     try { const r = await api("/status?job=" + S.job);
       for (const [k, u] of Object.entries(r.images)) S.ours[k] = SERVER + u;
-      if (Math.abs(r.eta_s - etaLeft()) > 5) setEta(r.eta_s); } catch (e) {}
+      if (r.eta_s < etaLeft() - 5) setEta(r.eta_s); } catch (e) {}   // the shown time only goes down (a later server estimate can be longer); at 0: "거의 다 됐어요"
     await sleep(3000);
   }
 }
