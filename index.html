@@ -132,8 +132,8 @@ const PALETTE = [                                                    // all in t
   ["무채색", [["gray","회색"],["light gray","연회색"],["dark gray","진회색"],["silver","은색"],["charcoal","숯색"],["slate","청회색"],["black","검정"],["white","흰색"],["off-white","미색"]]] ];
 const KO = Object.fromEntries(PALETTE.flatMap(g => g[1]));
 const PROMPTS = [                                                    // code/user_study_server/trials_pref2.json: test words = context words
-  { id: "p_red_yarn", color: "red", ko: "빨강", object: "털실" }, { id: "p_blue_chair", color: "blue", ko: "파랑", object: "소파 의자" },   // unguided: images_ab/<id>/<gen>.jpg
-  { id: "p_green_bowl", color: "green", ko: "초록", object: "그릇" }, { id: "p_orange_sofa", color: "orange", ko: "주황", object: "소파" },  // (FLUX: 768 px, 28 steps)
+  { id: "p_red_rose", color: "red", ko: "빨간", object: "장미 한 송이" }, { id: "p_blue_chair", color: "blue", ko: "파란", object: "소파 의자" },   // unguided: images_ab/<id>/<gen>.jpg
+  { id: "p_green_bowl", color: "green", ko: "초록", object: "그릇" }, { id: "p_orange_fruit", color: "orange", ko: "주황색", object: "오렌지" },  // (FLUX: 768 px, 28 steps)
   { id: "p_navy_hat", color: "navy blue", ko: "남색", object: "니트 모자" } ];
 const GENS = ["sd35", "flux"];
 let ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));     // 10 A/B items (only the generators the server serves)
@@ -368,7 +368,7 @@ function ab(it) {
   <div class="bar"><i style="width:${(S.done / n) * 100}%"></i></div>
   <div class="card">
     <p class="q">어느 쪽이 여러분이 원하는 <em>${esc(it.ko)} ${esc(it.object)}</em>에 더 가까운가요?</p>
-    <p class="muted" style="font-size:14px">두 이미지 중 하나를 눌러 주세요. 앞에서 고른 "${esc(it.ko)}"을 떠올리며, 이미지에 "${esc(it.ko)}"이라고 썼을 때 나왔으면 하는 색을 기준으로 골라 주세요.</p>
+    <p class="muted" style="font-size:14px">두 이미지 중 하나를 눌러 주세요. 앞에서 고른 ${esc(COLOR_KO[it.color])}을 떠올리며, 이미지에 "${esc(COLOR_KO[it.color])}"이라고 썼을 때 나왔으면 하는 색을 기준으로 골라 주세요.</p>
   </div>
   <div class="ab" id="ab">${sides.map((k, j) => `
     <button class="opt" data-k="${k}" aria-label="이미지 ${"AB"[j]}"><img src="${esc(src(k))}" alt=""><span class="tag">${"AB"[j]}</span></button>`).join("")}
