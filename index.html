@@ -94,6 +94,13 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 .chip.on small { color: var(--accent-fg); opacity: .8; }
 .picked { font-size: 15px; } .picked b { font-weight: 600; }
 .ko { font-size: 13px; color: var(--muted); }
+.grid9 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: min(100%, 360px); margin: 12px auto; }
+.cell { aspect-ratio: 1; border-radius: 6px; border: 3px solid transparent; padding: 0; cursor: pointer; }
+.axes { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; gap: 6px; align-items: center; width: min(100%, 400px); margin: 8px auto; }
+.axes .grid9 { margin: 0; width: 100%; }
+.ax-y { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; color: var(--muted); text-align: center; }
+.ax-x { grid-column: 2; font-size: 12px; color: var(--muted); text-align: center; }
+.cell.on { border-color: var(--fg); box-shadow: 0 0 0 2px var(--bg) inset; }
 .ab { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .ab .opt .tag { font-size: 14px; padding: 3px 9px; }
 @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
@@ -103,14 +110,15 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 <div class="wrap" id="app" aria-live="polite"></div>
 
 <script>
-/* One session: ID -> name 7 colors (pick an English color word, Korean gloss shown; or type another English name) -> our images
-   are generated on the study server meanwhile (SD 3.5 and FLUX.2, both guided toward the participant's predicted colors) ->
-   short survey with a simple color-vision check -> 18 A/B choices (9 prompts x 2 generators: unguided vs. guided, same seed,
-   random sides). Responses go to the Google Sheet (apps_script.gs: naming rows; A/B rows use the "rank" sheet).
-   Patch colors: XKCD population mean (CIELAB) of peach, teal, lavender, maroon, gold, magenta, beige; the words are never shown. */
-const COLORS = [
-  { k: "c1", hex: "#EFA578" }, { k: "c2", hex: "#47B29E" }, { k: "c3", hex: "#B480D0" }, { k: "c4", hex: "#832437" },
-  { k: "c5", hex: "#CFB02D" }, { k: "c6", hex: "#CB2E97" }, { k: "c7", hex: "#D5C085" } ];
+/* One session: ID -> preference context: for red, orange, green, blue and navy blue, two axis-ordered 3x3 grids each
+   (10 screens, random order): LC = rows lightness (top lighter) x columns chroma (right more saturated); HC = rows hue
+   (h0 - 18 / h0 / h0 + 18 degrees, labeled per word, e.g. purplish / orangish red) x the same chroma columns. Around a common
+   shade of each word, all cells in sRGB and clearly different (code/user_study_server/pref/make_grids_axes.py).
+   The picks are sent to the study server as (color, word) context pairs -> our images are generated meanwhile -> short survey
+   -> A/B choices. Responses go to the Google Sheet (context rows: type "naming", protocol "pref-axes2"; A/B rows: "rank").
+   ?test: click through the context screens without the server (nothing is sent). */
+const WORDS = [["red","빨강"],["orange","주황"],["green","초록"],["blue","파랑"],["navy blue","남색"]];
+const GRIDS = {"red":{"LC":[[{"hex":"#C48E86","L":64.0,"a":19.3,"b":12.3},{"hex":"#E18074","L":63.9,"a":35.9,"b":23.1},{"hex":"#FD6E60","L":63.9,"a":53.6,"b":35.0}],[{"hex":"#A36057","L":48.0,"a":26.3,"b":16.9},{"hex":"#C34940","L":47.8,"a":48.2,"b":31.2},{"hex":"#E21227","L":47.9,"a":71.9,"b":46.8}],[{"hex":"#6D3F38","L":31.9,"a":19.1,"b":12.9},{"hex":"#842F28","L":32.0,"a":36.1,"b":23.8},{"hex":"#9A0817","L":32.0,"a":54.2,"b":35.2}]],"HC":[[{"hex":"#9F6067","L":47.8,"a":26.6,"b":7.1},{"hex":"#BF4A5E","L":47.9,"a":48.6,"b":13.3},{"hex":"#DF1255","L":47.9,"a":73.0,"b":19.8}],[{"hex":"#A36057","L":48.0,"a":26.3,"b":16.9},{"hex":"#C34940","L":47.8,"a":48.2,"b":31.2},{"hex":"#E21227","L":47.9,"a":71.9,"b":46.8}],[{"hex":"#976750","L":48.0,"a":16.6,"b":20.8},{"hex":"#AF5B32","L":47.9,"a":31.0,"b":38.3},{"hex":"#C44B06","L":47.9,"a":45.9,"b":56.8}]],"hue":["자줏빛","주황빛"]},"orange":{"LC":[[{"hex":"#D9B8A4","L":77.0,"a":8.8,"b":14.5},{"hex":"#ECB28E","L":77.0,"a":16.5,"b":26.5},{"hex":"#FDAB76","L":76.8,"a":24.5,"b":39.5}],[{"hex":"#C4906F","L":64.0,"a":15.4,"b":25.4},{"hex":"#DE8548","L":63.9,"a":28.8,"b":46.6},{"hex":"#F5770D","L":63.7,"a":43.5,"b":69.2}],[{"hex":"#9A7056","L":50.7,"a":13.4,"b":21.0},{"hex":"#AF6837","L":50.9,"a":24.2,"b":39.0},{"hex":"#C25D08","L":51.0,"a":36.5,"b":58.1}]],"HC":[[{"hex":"#C58E80","L":63.9,"a":18.9,"b":15.7},{"hex":"#E28169","L":64.0,"a":34.8,"b":29.4},{"hex":"#FD6F50","L":63.9,"a":52.2,"b":43.6}],[{"hex":"#C4906F","L":64.0,"a":15.4,"b":25.4},{"hex":"#DE8548","L":63.9,"a":28.8,"b":46.6},{"hex":"#F5770D","L":63.7,"a":43.5,"b":69.2}],[{"hex":"#B59670","L":64.0,"a":6.1,"b":24.6},{"hex":"#C4924A","L":64.0,"a":11.0,"b":44.8},{"hex":"#D18E0E","L":64.1,"a":16.5,"b":67.0}]],"hue":["붉은빛","노란빛"]},"green":{"LC":[[{"hex":"#8DB988","L":70.9,"a":-24.1,"b":20.2},{"hex":"#68C165","L":70.8,"a":-45.3,"b":38.1},{"hex":"#1CC93A","L":71.0,"a":-67.7,"b":57.0}],[{"hex":"#6A8C66","L":54.8,"a":-19.9,"b":16.7},{"hex":"#4E934B","L":55.0,"a":-37.1,"b":31.5},{"hex":"#12992A","L":55.1,"a":-55.4,"b":46.5}],[{"hex":"#496246","L":38.7,"a":-15.4,"b":13.0},{"hex":"#356733","L":38.9,"a":-28.5,"b":24.0},{"hex":"#0A6B1B","L":38.8,"a":-42.5,"b":35.6}]],"HC":[[{"hex":"#7B8960","L":55.0,"a":-12.8,"b":20.5},{"hex":"#708D3F","L":54.9,"a":-23.6,"b":37.8},{"hex":"#60920B","L":55.1,"a":-35.6,"b":56.2}],[{"hex":"#6A8C66","L":54.8,"a":-19.9,"b":16.7},{"hex":"#4E934B","L":55.0,"a":-37.1,"b":31.5},{"hex":"#12992A","L":55.1,"a":-55.4,"b":46.5}],[{"hex":"#698B78","L":54.8,"a":-16.3,"b":6.5},{"hex":"#4C916D","L":54.9,"a":-30.7,"b":12.7},{"hex":"#119662","L":54.8,"a":-45.7,"b":18.5}]],"hue":["연둣빛","청록빛"]},"blue":{"LC":[[{"hex":"#8E9BBE","L":64.1,"a":3.2,"b":-19.5},{"hex":"#7D9BDC","L":64.1,"a":6.2,"b":-36.2},{"hex":"#5E9BFC","L":64.0,"a":9.5,"b":-54.0}],[{"hex":"#657293","L":48.0,"a":3.4,"b":-19.7},{"hex":"#5072B0","L":47.9,"a":6.5,"b":-36.8},{"hex":"#1672D0","L":47.8,"a":10.2,"b":-55.5}],[{"hex":"#424B63","L":31.9,"a":2.8,"b":-15.1},{"hex":"#334B77","L":31.8,"a":5.0,"b":-27.8},{"hex":"#0B4C8D","L":32.1,"a":7.3,"b":-41.4}]],"HC":[[{"hex":"#617489","L":47.9,"a":-1.7,"b":-14.0},{"hex":"#4A769D","L":47.9,"a":-3.4,"b":-25.8},{"hex":"#1378B2","L":47.8,"a":-5.3,"b":-38.3}],[{"hex":"#657293","L":48.0,"a":3.4,"b":-19.7},{"hex":"#5072B0","L":47.9,"a":6.5,"b":-36.8},{"hex":"#1672D0","L":47.8,"a":10.2,"b":-55.5}],[{"hex":"#726BA2","L":47.7,"a":15.6,"b":-28.8},{"hex":"#6866CC","L":47.9,"a":28.1,"b":-53.0},{"hex":"#4C60FB","L":48.0,"a":42.3,"b":-79.3}]],"hue":["청록빛","보랏빛"]},"navy blue":{"LC":[[{"hex":"#515C77","L":39.0,"a":2.7,"b":-16.6},{"hex":"#405C8F","L":39.0,"a":5.5,"b":-31.5},{"hex":"#0F5CA9","L":38.8,"a":8.4,"b":-47.4}],[{"hex":"#3A4257","L":28.0,"a":2.4,"b":-13.5},{"hex":"#2D4269","L":27.9,"a":4.5,"b":-25.2},{"hex":"#08427D","L":27.8,"a":6.9,"b":-38.1}],[{"hex":"#242A38","L":17.0,"a":1.5,"b":-9.8},{"hex":"#1B2A45","L":17.0,"a":3.2,"b":-18.8},{"hex":"#042A53","L":16.9,"a":5.2,"b":-28.4}]],"HC":[[{"hex":"#374350","L":27.8,"a":-1.3,"b":-9.4},{"hex":"#29455D","L":28.1,"a":-2.7,"b":-17.4},{"hex":"#07466A","L":27.9,"a":-3.9,"b":-26.0}],[{"hex":"#3A4257","L":28.0,"a":2.4,"b":-13.5},{"hex":"#2D4269","L":27.9,"a":4.5,"b":-25.2},{"hex":"#08427D","L":27.8,"a":6.9,"b":-38.1}],[{"hex":"#413D66","L":27.8,"a":12.5,"b":-23.4},{"hex":"#373986","L":27.9,"a":23.4,"b":-43.7},{"hex":"#0E35A9","L":28.1,"a":34.5,"b":-64.9}]],"hue":["청록빛","보랏빛"]}};
 const PALETTE = [                                                    // all in the predictor's 1,000-name vocabulary
   ["빨강 계열", [["red","빨강"],["dark red","진한 빨강"],["bright red","밝은 빨강"],["crimson","진홍"],["scarlet","주홍빛 빨강"],["cherry red","체리색"],["burgundy","버건디"],["maroon","적갈색"],["wine","와인색"],["brick red","벽돌색"]]],
   ["분홍 계열", [["pink","분홍"],["light pink","연분홍"],["pale pink","옅은 분홍"],["hot pink","진분홍"],["rose","장밋빛"],["dusty rose","탁한 장밋빛"],["salmon","연어색"],["coral","산호색"],["peach","복숭아색"],["magenta","자홍"],["fuchsia","푸크시아"],["mauve","연보라빛 분홍"]]],
@@ -122,16 +130,15 @@ const PALETTE = [                                                    // all in t
   ["보라 계열", [["purple","보라"],["light purple","연보라"],["dark purple","진보라"],["violet","바이올렛"],["lavender","라벤더"],["lilac","라일락"],["plum","자두색"],["indigo","남보라"],["orchid","난초색"],["grape","포도색"]]],
   ["무채색", [["gray","회색"],["light gray","연회색"],["dark gray","진회색"],["silver","은색"],["charcoal","숯색"],["slate","청회색"],["black","검정"],["white","흰색"],["off-white","미색"]]] ];
 const KO = Object.fromEntries(PALETTE.flatMap(g => g[1]));
-const PROMPTS = [                                                    // trials_ab.json (seed 0); unguided: images_ab/<id>/<gen>.jpg
-  { id: "c01", color: "red", object: "사과" }, { id: "c03", color: "blue", object: "청바지" },
-  { id: "c04", color: "brown", object: "초콜릿" }, { id: "c05", color: "orange", object: "호박" },
-  { id: "c06", color: "gold", object: "동전" }, { id: "c07", color: "yellow", object: "달" },
-  { id: "c09", color: "green", object: "나뭇잎" }, { id: "c12", color: "emerald", object: "보석" },
-  { id: "c13", color: "pink", object: "돼지 저금통" } ];
+const PROMPTS = [                                                    // code/user_study_server/trials_pref.json (scenes of the generation experiments, own seeds);
+  { id: "p_red_mug", color: "red", object: "머그컵" }, { id: "p_blue_chair", color: "blue", object: "소파 의자" },   // unguided: images_ab/<id>/<gen>.jpg
+  { id: "p_pink_towel", color: "pink", object: "수건" }, { id: "p_brown_door", color: "brown", object: "현관문" },     // (FLUX: 768 px, 28 steps)
+  { id: "p_green_dress", color: "green", object: "원피스" } ];
 const GENS = ["sd35", "flux"];
-let ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));     // 18 A/B items (only the generators the server serves)
-const VERSION = "ab1";
+let ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));     // 10 A/B items (only the generators the server serves)
+const VERSION = "pref5";
 const ENDPOINT = "https://script.google.com/macros/s/AKfycbwCvTPmdHTpjzjaPpZdl-j-OjecBMxxow6NTYnPsXauXDs4bW_SNbMGTN_sO14J0y8W/exec";
+const TEST = new URLSearchParams(location.search).has("test");   // ?test: click through the context screens without the server (nothing is sent)
 let SERVER = "";                                                    // from config.json (the study server's public address)
 
 const app = document.getElementById("app");
@@ -170,13 +177,13 @@ function home() {
   <h1>The same color word can mean slightly different colors to different people.</h1>
   <div><p class="rainbow">Color is a really fascinating topic, especially since we’re taught so many different and often contradictory ideas about rainbows.</p>
   <p class="ko">색은 정말 흥미로운 주제입니다. 우리가 어렸을 적 무지개에 대해 배워 온 이야기들이 저마다 다르고 때로는 서로 엇갈린다는 점을 생각하면 더욱 그렇습니다.</p></div>
-  <p class="muted">이 연구에서는 여러분이 색에 이름을 붙이는 방식을 알아보고, 여러분이 떠올리는 색으로 이미지를 만들 수 있는지 확인합니다. 색 이름 붙이기, 짧은 설문, 이미지 비교 순서로 한 번에 진행됩니다.</p>
+  <p class="muted">이 연구에서는 여러분이 원하는 색을 몇 가지 알려 주시면, 그 취향을 다른 색에도 반영해 이미지를 만들 수 있는지 확인합니다. 원하는 색 고르기, 짧은 설문, 이미지 비교 순서로 한 번에 진행됩니다.</p>
   <div class="card">
     <h2>시작하기 전에</h2>
     <ul class="checks emoji">
       <li><span aria-hidden="true">🔆</span><span>화면 밝기는 평소대로 두고, 야간 모드나 블루라이트 필터는 꺼주세요.</span></li>
-      <li><span aria-hidden="true">🎨</span><span>색 7개가 하나씩 나옵니다. 각 색을 가장 잘 나타내는 <b>영어 색 이름</b>을 목록에서 골라 주세요. 목록에 없으면 직접 입력할 수 있습니다.</span></li>
-      <li><span aria-hidden="true">💬</span><span>정답은 없습니다. 평소 그 색을 부르는 이름을 골라 주세요.</span></li>
+      <li><span aria-hidden="true">🎨</span><span>빨강·주황·초록·파랑·남색마다 색 9개가 두 번씩 나옵니다(밝기와 선명함이 다른 9개, 색감과 선명함이 다른 9개). 그중 <b>여러분이 원하는 그 색</b>에 가장 가까운 것을 골라 주세요.</span></li>
+      <li><span aria-hidden="true">💬</span><span>정답은 없습니다. 이미지에 그 색 이름을 썼을 때 나왔으면 하는 색을 골라 주세요.</span></li>
     </ul>
   </div>
   <div class="card">
@@ -186,55 +193,57 @@ function home() {
   </div>`);
   const go = async () => {
     const err = document.getElementById("err");
-    try { const h = await api("/health"); if (!h.ok || !h.workers) throw 0;
-          if (h.gens) ITEMS = ITEMS.filter(x => h.gens.includes(x.gen)); }
-    catch (e) { err.textContent = "지금은 연구 서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 연구자에게 문의해 주세요."; return; }
+    if (!TEST) {
+      try { const h = await api("/health"); if (!h.ok || !h.workers) throw 0;
+            if (h.gens) ITEMS = ITEMS.filter(x => h.gens.includes(x.gen)); }
+      catch (e) { err.textContent = "지금은 연구 서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 연구자에게 문의해 주세요."; return; }
+    }
     S.tStart = performance.now(); S.startedAt = new Date().toISOString(); S.timing = {};
-    S.order = shuffle(COLORS); S.i = 0; S.answers = []; naming();
+    S.order = shuffle(WORDS.flatMap(([w, ko]) => ["LC", "HC"].map(g => ({ w, ko, g })))); S.i = 0; S.answers = []; naming();
   };
   document.getElementById("go").onclick = go;
 }
 
-/* ---------------- 1. naming: pick an English color word (Korean gloss) or type another English name ---------------- */
+/* ---------------- 1. preference context: one axis-ordered 3x3 grid per word (rows lightness, columns chroma) ---------------- */
 function naming() {
-  const c = S.order[S.i], n = S.order.length; let pick = "";
+  const task = S.order[S.i], n = S.order.length; let pick = null;
+  const G = GRIDS[task.w], grid = G[task.g], hue = G.hue;
+  const cells = grid.flatMap((row, r) => row.map((c, k) => Object.assign({ r, c: k }, c)));
   view(`${header(`색 ${S.i + 1} / ${n}`)}
   <div class="bar"><i style="width:${(S.i / n) * 100}%"></i></div>
-  <div class="stage"><div class="patch" style="background:${c.hex}" role="img" aria-label="색 샘플 ${S.i + 1}"></div></div>
   <div class="card">
-    <label>이 색을 영어로 뭐라고 부르시겠어요?</label>
-    <p class="picked" id="picked"><span class="muted">아래에서 하나를 골라 주세요.</span></p>
-    ${PALETTE.map(([g, ws]) => `<div class="grp"><span class="grp-h">${esc(g)}</span><div class="chips">${ws.map(([w, k]) =>
-      `<button class="chip" data-w="${esc(w)}">${esc(w)}<small>${esc(k)}</small></button>`).join("")}</div></div>`).join("")}
-    <div class="grp"><span class="grp-h">기타 (목록에 없으면 영어로 직접 입력)</span>
-      <input type="text" id="nm" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="예: dusty blue"></div>
+    <h2>원하는 <b>${esc(task.ko)}</b>에 가장 가까운 색을 골라 주세요.</h2>
+    <p class="muted" style="font-size:14px">이미지에 "${esc(task.ko)}"이라고 썼을 때 나왔으면 하는 색을 하나 골라 주세요. ${task.g === "LC" ? "위로 갈수록 밝고, 아래로 갈수록 어둡습니다." : `위로 갈수록 ${esc(hue[0])}, 아래로 갈수록 ${esc(hue[1])}이 돌아요.`} 오른쪽으로 갈수록 선명합니다.</p>
+    <div class="axes">
+      <span class="ax-y">${task.g === "LC" ? "밝게 ↑ · 어둡게 ↓" : `${esc(hue[0])} ↑ · ${esc(hue[1])} ↓`}</span>
+      <div class="grid9">${cells.map((c, i) => `<button class="cell" data-i="${i}" style="background:${c.hex}" aria-label="${task.g === "LC" ? "밝기" : "색감"} ${c.r + 1}행, 선명함 ${c.c + 1}단계"></button>`).join("")}</div>
+      <span class="ax-x">← 차분하게 · 선명하게 →</span>
+    </div>
     <div class="err" id="err"></div>
     <div class="btns"><button class="primary" id="next">${S.i + 1 < n ? "다음" : "완료"}</button></div>
   </div>`);
   S.t0 = performance.now();
-  const inp = document.getElementById("nm"), shown = document.getElementById("picked");
-  const paint = () => {
-    app.querySelectorAll(".chip").forEach(b => b.classList.toggle("on", b.dataset.w === pick));
-    shown.innerHTML = pick ? `선택: <b>${esc(pick)}</b>${KO[pick] ? ` <span class="muted">(${esc(KO[pick])})</span>` : ""}` : `<span class="muted">아래에서 하나를 골라 주세요.</span>`;
-  };
-  app.querySelectorAll(".chip").forEach(b => b.onclick = () => { pick = b.dataset.w; inp.value = ""; paint(); });
-  inp.oninput = () => { pick = inp.value.trim().toLowerCase(); paint(); };
-  const next = () => {
-    const err = document.getElementById("err");
-    if (!pick) { err.textContent = "색 이름을 하나 골라 주세요."; return; }
-    if (/[^\x20-\x7E]/.test(pick)) { err.textContent = "직접 입력할 때는 영어로 적어 주세요."; return; }
-    S.answers.push({ k: c.k, hex: c.hex, name: pick, typed: !KO[pick], ms: Math.round(performance.now() - S.t0) });
+  app.querySelectorAll(".cell").forEach(b => b.onclick = () => {
+    pick = cells[+b.dataset.i]; app.querySelectorAll(".cell").forEach(x => x.classList.toggle("on", x === b));
+  });
+  document.getElementById("next").onclick = () => {
+    if (!pick) { document.getElementById("err").textContent = "색을 하나 골라 주세요."; return; }
+    S.answers.push({ word: task.w, grid: task.g, row: pick.r, col: pick.c, hex: pick.hex, L: pick.L, a: pick.a, b: pick.b, ms: Math.round(performance.now() - S.t0) });
     S.i++; if (S.i >= n) S.timing.naming_ms = Math.round(performance.now() - S.tStart);
     S.i < n ? naming() : submitNaming();
   };
-  document.getElementById("next").onclick = next;
-  inp.onkeydown = e => { if (e.key === "Enter") next(); };
 }
 
 async function submitNaming() {
+  if (TEST) {                                                         // test mode: show the picks, send nothing
+    view(`${header("테스트 모드")}<h1>고른 색 (서버로 보내지 않음)</h1>
+    <div class="card">${S.answers.map(x => `<p><span style="display:inline-block;width:28px;height:28px;border-radius:4px;vertical-align:middle;background:${x.hex}"></span>
+      <b>${esc(x.word)}</b> ${x.grid === "LC" ? "밝기×선명함" : "색감×선명함"} · ${esc(x.hex)} · L ${x.L} a ${x.a} b ${x.b} · ${x.row + 1}행 ${x.col + 1}열 · ${(x.ms / 1000).toFixed(1)}초</p>`).join("")}</div>`);
+    console.log(S.answers); return;
+  }
   view(`${header("잠시만요")}<h1>답변을 보내는 중입니다…</h1>`);
   for (let t = 0; t < 3 && !S.job; t++) {
-    try { const r = await api("/submit", { pid: S.pid, answers: S.answers.map(a => ({ hex: a.hex, name: a.name })) }); S.job = r.job; setEta(r.eta_s); }
+    try { const r = await api("/submit", { pid: S.pid, answers: S.answers.map(a => ({ hex: a.hex, name: a.word })) }); S.job = r.job; setEta(r.eta_s); }
     catch (e) { await sleep(1500); }
   }
   if (!S.job) {
@@ -317,7 +326,7 @@ function drawPlate(cv, P) {
 
 async function afterSurvey() {
   S.timing.survey_ms = Math.round(performance.now() - S.tSurvey);
-  S.sends = [sheet({ type: "naming", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(),
+  S.sends = [sheet({ type: "naming", protocol: "pref-axes2", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(),
                      timing: Object.assign({ started_at: S.startedAt }, S.timing), at: new Date().toISOString(), v: VERSION })];
   S.queue = shuffle(ITEMS.filter(x => x.gen === "sd35")).concat(shuffle(ITEMS.filter(x => x.gen === "flux")));   // SD 3.5 images are ready first
   S.done = 0; nextItem();
@@ -357,8 +366,8 @@ function ab(it) {
   view(`${header(`비교 ${S.done + 1} / ${n}`)}
   <div class="bar"><i style="width:${(S.done / n) * 100}%"></i></div>
   <div class="card">
-    <p class="q">어느 쪽 <em>${esc(it.object)}</em>가 여러분이 생각하는 <em>${esc(it.color)}</em>에 더 가까운가요?</p>
-    <p class="muted" style="font-size:14px">두 이미지 중 하나를 눌러 주세요. <b>${esc(it.color)}</b>(${esc(KO[it.color] || "")})라는 단어를 들었을 때 떠오르는 색을 기준으로 골라 주세요.</p>
+    <p class="q">어느 쪽이 여러분이 원하는 <em>${esc(KO[it.color] || it.color)} ${esc(it.object)}</em>에 더 가까운가요?</p>
+    <p class="muted" style="font-size:14px">두 이미지 중 하나를 눌러 주세요. 이미지에 "${esc(KO[it.color] || it.color)}"이라고 썼을 때 나왔으면 하는 색을 기준으로 골라 주세요.</p>
   </div>
   <div class="ab" id="ab">${sides.map((k, j) => `
     <button class="opt" data-k="${k}" aria-label="이미지 ${"AB"[j]}"><img src="${esc(src(k))}" alt=""><span class="tag">${"AB"[j]}</span></button>`).join("")}
