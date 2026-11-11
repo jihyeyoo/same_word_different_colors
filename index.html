@@ -208,6 +208,28 @@ function home() {
 
 /* ---------------- 1. preference context: four swatches (object colors of four seeds), one from each color group ---------------- */
 const optionsOf = t => shuffle(PREF[t.w].groups.map((g, gi) => Object.assign({ group: gi }, g[t.k])));
+function de2000(p, q) {                                               // CIEDE2000 (Sharma et al. 2005), Lab arrays
+  const r = Math.PI / 180, [L1, a1, b1] = p, [L2, a2, b2] = q, C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2), Cm = (C1 + C2) / 2;
+  const G = 0.5 * (1 - Math.sqrt(Cm ** 7 / (Cm ** 7 + 25 ** 7))), A1 = (1 + G) * a1, A2 = (1 + G) * a2;
+  const c1 = Math.hypot(A1, b1), c2 = Math.hypot(A2, b2), h = (x, y) => { const v = Math.atan2(y, x) / r; return v < 0 ? v + 360 : v; };
+  const h1 = c1 ? h(A1, b1) : 0, h2 = c2 ? h(A2, b2) : 0; let dh = h2 - h1; if (c1 * c2 === 0) dh = 0; else if (dh > 180) dh -= 360; else if (dh < -180) dh += 360;
+  const dL = L2 - L1, dC = c2 - c1, dH = 2 * Math.sqrt(c1 * c2) * Math.sin(dh * r / 2), Lm = (L1 + L2) / 2, cm = (c1 + c2) / 2;
+  let hm = h1 + h2; if (c1 * c2 !== 0) hm = Math.abs(h1 - h2) <= 180 ? hm / 2 : (hm < 360 ? (hm + 360) / 2 : (hm - 360) / 2);
+  const T = 1 - 0.17 * Math.cos((hm - 30) * r) + 0.24 * Math.cos(2 * hm * r) + 0.32 * Math.cos((3 * hm + 6) * r) - 0.2 * Math.cos((4 * hm - 63) * r);
+  const SL = 1 + 0.015 * (Lm - 50) ** 2 / Math.sqrt(20 + (Lm - 50) ** 2), SC = 1 + 0.045 * cm, SH = 1 + 0.015 * cm * T;
+  const RT = -2 * Math.sqrt(cm ** 7 / (cm ** 7 + 25 ** 7)) * Math.sin(60 * Math.exp(-(((hm - 275) / 25) ** 2)) * r);
+  return Math.sqrt((dL / SL) ** 2 + (dC / SC) ** 2 + (dH / SH) ** 2 + RT * (dC / SC) * (dH / SH));
+}
+function userGroups() {                                               // per word: the most picked group (1-4); tie -> group whose mean is nearest (CIEDE2000) to the picks' mean
+  const out = {};
+  WORDS.forEach(([w]) => {
+    const pk = S.answers.filter(a => a.word === w), n = [0, 0, 0, 0]; pk.forEach(a => n[a.group]++);
+    const top = Math.max(...n), cand = [0, 1, 2, 3].filter(g => n[g] === top), mean = xs => [0, 1, 2].map(i => xs.reduce((s, x) => s + x[i], 0) / xs.length);
+    const mu = mean(pk.map(a => [a.L, a.a, a.b]));
+    out[w] = 1 + (cand.length === 1 ? cand[0] : cand.reduce((b, g) => de2000(mu, mean(PREF[w].groups[g].map(m => [m.L, m.a, m.b]))) < de2000(mu, mean(PREF[w].groups[b].map(m => [m.L, m.a, m.b]))) ? g : b));
+  });
+  return out;
+}
 function naming() {
   const task = S.order[S.i], n = S.order.length; let pick = null;
   const opts = task.opts || (task.opts = optionsOf(task)); const P = PREF[task.w];
@@ -228,7 +250,7 @@ function naming() {
     if (!pick) { document.getElementById("err").textContent = "색을 하나 골라 주세요."; return; }
     S.answers.push({ word: task.w, screen: task.k, group: pick.group, seed: pick.seed, pos: opts.indexOf(pick), hex: pick.hex, L: pick.L, a: pick.a, b: pick.b,
                      shown: opts.map(o => o.seed), ms: Math.round(performance.now() - S.t0) });
-    S.i++; if (S.i >= n) S.timing.naming_ms = Math.round(performance.now() - S.tStart);
+    S.i++; if (S.i >= n) { S.timing.naming_ms = Math.round(performance.now() - S.tStart); S.groups = userGroups(); }
     S.i < n ? naming() : submitNaming();
   };
 }
@@ -325,7 +347,7 @@ function drawPlate(cv, P) {
 
 async function afterSurvey() {
   S.timing.survey_ms = Math.round(performance.now() - S.tSurvey);
-  S.sends = [sheet({ type: "naming", protocol: "pref-seed", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(),
+  S.sends = [sheet({ type: "naming", protocol: "pref-seed", pid: S.pid, job: S.job, groups: S.groups, answers: S.answers, survey: S.survey, device: device(),
                      timing: Object.assign({ started_at: S.startedAt }, S.timing), at: new Date().toISOString(), v: VERSION })];
   S.queue = shuffle(ITEMS.filter(x => x.gen === "sd35")).concat(shuffle(ITEMS.filter(x => x.gen === "flux")));   // SD 3.5 images are ready first
   S.done = 0; nextItem();
@@ -374,7 +396,9 @@ function ab(it) {
   document.getElementById("ab").onclick = e => {
     const b = e.target.closest(".opt"); if (!b) return; const choice = b.dataset.k;
     S.choices[it.key] = choice;
-    S.sends = (S.sends || []).concat(sheet({ type: "rank", pid: S.pid, job: S.job, trial: it.key, gen: it.gen, prompt: it.id, object: it.object, color: it.color,
+    const tg = +it.id.split("_g").pop(), ug = (S.groups || {})[it.color];
+    S.sends = (S.sends || []).concat(sheet({ type: "rank", protocol: "pref-seed", pid: S.pid, job: S.job, trial: it.key, gen: it.gen, prompt: it.id, object: it.object, color: it.color,
+            group: tg, user_group: ug, test: tg === ug ? "intra" : "inter",
             rank: [choice], shown: sides.slice(), choice, ms: Math.round(performance.now() - S.tItem), wait_ms: S.waitMs,
             elapsed_ms: Math.round(performance.now() - S.tStart), at: new Date().toISOString(), v: VERSION }));   // sent in the background
     S.done++; nextItem();
