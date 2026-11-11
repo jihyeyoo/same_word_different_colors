@@ -94,6 +94,7 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 .chip.on small { color: var(--accent-fg); opacity: .8; }
 .picked { font-size: 15px; } .picked b { font-weight: 600; }
 .ko { font-size: 13px; color: var(--muted); }
+.grid4 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: min(100%, 300px); margin: 14px auto; }
 .grid9 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: min(100%, 360px); margin: 12px auto; }
 .cell { aspect-ratio: 1; border-radius: 6px; border: 3px solid transparent; padding: 0; cursor: pointer; }
 .axes { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; gap: 6px; align-items: center; width: min(100%, 400px); margin: 8px auto; }
@@ -110,16 +111,17 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 <div class="wrap" id="app" aria-live="polite"></div>
 
 <script>
-/* One session: ID -> preference context: for red, orange, green, blue and navy blue, two axis-ordered 3x3 grids each
-   (10 screens: red, orange, green, blue, navy with the LC grid, then the same order with the HC grid): LC = rows lightness (top lighter) x columns chroma (right more saturated); HC = rows hue
-   (h0 - 18 / h0 / h0 + 18 degrees, labeled per word, e.g. purplish / orangish red) x the same chroma columns. Around a common
-   shade of each word, all cells in sRGB and clearly different (code/user_study_server/pref/make_grids_axes.py).
+/* One session: ID -> preference context: for red, orange, yellow, green, blue and purple, five 2x2 grids each (30 screens:
+   grid 1 of every word in this order, then grid 2, ...). Each grid: four colors of the word that differ in lightness and
+   chroma (top lighter, right more vivid); the five grids of a word cover different parts of it (typical / lighter / deeper /
+   hue toward one neighbor / the other, or the four corners around the typical one). Hand-set in OKLCH, all colors in sRGB
+   (code/user_study_server/pref/make_grids_6x5.py -> grids_6x5.json).
    The picks are sent to the study server as (color, word) context pairs -> our images are generated meanwhile -> short survey
-   -> A/B choices. Responses go to the Google Sheet (context rows: type "naming", protocol "pref-axes2"; A/B rows: "rank").
+   -> A/B choices. Responses go to the Google Sheet (context rows: type "naming", protocol "pref-6x5"; A/B rows: "rank").
    ?test: click through the context screens without the server (nothing is sent). */
-const WORDS = [["red","빨강"],["orange","주황"],["green","초록"],["blue","파랑"],["navy blue","남색"]];
-const COLOR_KO = { red: "빨간색", orange: "주황색", green: "초록색", blue: "파란색", "navy blue": "남색" };   // "선호하는 ___을 골라 주세요"
-const GRIDS = {"red":{"LC":[[{"hex":"#C48E86","L":64.0,"a":19.3,"b":12.3},{"hex":"#E18074","L":63.9,"a":35.9,"b":23.1},{"hex":"#FD6E60","L":63.9,"a":53.6,"b":35.0}],[{"hex":"#A36057","L":48.0,"a":26.3,"b":16.9},{"hex":"#C34940","L":47.8,"a":48.2,"b":31.2},{"hex":"#E21227","L":47.9,"a":71.9,"b":46.8}],[{"hex":"#6D3F38","L":31.9,"a":19.1,"b":12.9},{"hex":"#842F28","L":32.0,"a":36.1,"b":23.8},{"hex":"#9A0817","L":32.0,"a":54.2,"b":35.2}]],"HC":[[{"hex":"#9F6067","L":47.8,"a":26.6,"b":7.1},{"hex":"#BF4A5E","L":47.9,"a":48.6,"b":13.3},{"hex":"#DF1255","L":47.9,"a":73.0,"b":19.8}],[{"hex":"#A36057","L":48.0,"a":26.3,"b":16.9},{"hex":"#C34940","L":47.8,"a":48.2,"b":31.2},{"hex":"#E21227","L":47.9,"a":71.9,"b":46.8}],[{"hex":"#976750","L":48.0,"a":16.6,"b":20.8},{"hex":"#AF5B32","L":47.9,"a":31.0,"b":38.3},{"hex":"#C44B06","L":47.9,"a":45.9,"b":56.8}]],"hue":["자줏빛","주황빛"]},"orange":{"LC":[[{"hex":"#D9B8A4","L":77.0,"a":8.8,"b":14.5},{"hex":"#ECB28E","L":77.0,"a":16.5,"b":26.5},{"hex":"#FDAB76","L":76.8,"a":24.5,"b":39.5}],[{"hex":"#C4906F","L":64.0,"a":15.4,"b":25.4},{"hex":"#DE8548","L":63.9,"a":28.8,"b":46.6},{"hex":"#F5770D","L":63.7,"a":43.5,"b":69.2}],[{"hex":"#9A7056","L":50.7,"a":13.4,"b":21.0},{"hex":"#AF6837","L":50.9,"a":24.2,"b":39.0},{"hex":"#C25D08","L":51.0,"a":36.5,"b":58.1}]],"HC":[[{"hex":"#C58E80","L":63.9,"a":18.9,"b":15.7},{"hex":"#E28169","L":64.0,"a":34.8,"b":29.4},{"hex":"#FD6F50","L":63.9,"a":52.2,"b":43.6}],[{"hex":"#C4906F","L":64.0,"a":15.4,"b":25.4},{"hex":"#DE8548","L":63.9,"a":28.8,"b":46.6},{"hex":"#F5770D","L":63.7,"a":43.5,"b":69.2}],[{"hex":"#B59670","L":64.0,"a":6.1,"b":24.6},{"hex":"#C4924A","L":64.0,"a":11.0,"b":44.8},{"hex":"#D18E0E","L":64.1,"a":16.5,"b":67.0}]],"hue":["붉은빛","노란빛"]},"green":{"LC":[[{"hex":"#8DB988","L":70.9,"a":-24.1,"b":20.2},{"hex":"#68C165","L":70.8,"a":-45.3,"b":38.1},{"hex":"#1CC93A","L":71.0,"a":-67.7,"b":57.0}],[{"hex":"#6A8C66","L":54.8,"a":-19.9,"b":16.7},{"hex":"#4E934B","L":55.0,"a":-37.1,"b":31.5},{"hex":"#12992A","L":55.1,"a":-55.4,"b":46.5}],[{"hex":"#496246","L":38.7,"a":-15.4,"b":13.0},{"hex":"#356733","L":38.9,"a":-28.5,"b":24.0},{"hex":"#0A6B1B","L":38.8,"a":-42.5,"b":35.6}]],"HC":[[{"hex":"#7B8960","L":55.0,"a":-12.8,"b":20.5},{"hex":"#708D3F","L":54.9,"a":-23.6,"b":37.8},{"hex":"#60920B","L":55.1,"a":-35.6,"b":56.2}],[{"hex":"#6A8C66","L":54.8,"a":-19.9,"b":16.7},{"hex":"#4E934B","L":55.0,"a":-37.1,"b":31.5},{"hex":"#12992A","L":55.1,"a":-55.4,"b":46.5}],[{"hex":"#698B78","L":54.8,"a":-16.3,"b":6.5},{"hex":"#4C916D","L":54.9,"a":-30.7,"b":12.7},{"hex":"#119662","L":54.8,"a":-45.7,"b":18.5}]],"hue":["연둣빛","청록빛"]},"blue":{"LC":[[{"hex":"#8E9BBE","L":64.1,"a":3.2,"b":-19.5},{"hex":"#7D9BDC","L":64.1,"a":6.2,"b":-36.2},{"hex":"#5E9BFC","L":64.0,"a":9.5,"b":-54.0}],[{"hex":"#657293","L":48.0,"a":3.4,"b":-19.7},{"hex":"#5072B0","L":47.9,"a":6.5,"b":-36.8},{"hex":"#1672D0","L":47.8,"a":10.2,"b":-55.5}],[{"hex":"#424B63","L":31.9,"a":2.8,"b":-15.1},{"hex":"#334B77","L":31.8,"a":5.0,"b":-27.8},{"hex":"#0B4C8D","L":32.1,"a":7.3,"b":-41.4}]],"HC":[[{"hex":"#617489","L":47.9,"a":-1.7,"b":-14.0},{"hex":"#4A769D","L":47.9,"a":-3.4,"b":-25.8},{"hex":"#1378B2","L":47.8,"a":-5.3,"b":-38.3}],[{"hex":"#657293","L":48.0,"a":3.4,"b":-19.7},{"hex":"#5072B0","L":47.9,"a":6.5,"b":-36.8},{"hex":"#1672D0","L":47.8,"a":10.2,"b":-55.5}],[{"hex":"#726BA2","L":47.7,"a":15.6,"b":-28.8},{"hex":"#6866CC","L":47.9,"a":28.1,"b":-53.0},{"hex":"#4C60FB","L":48.0,"a":42.3,"b":-79.3}]],"hue":["청록빛","보랏빛"]},"navy blue":{"LC":[[{"hex":"#515C77","L":39.0,"a":2.7,"b":-16.6},{"hex":"#405C8F","L":39.0,"a":5.5,"b":-31.5},{"hex":"#0F5CA9","L":38.8,"a":8.4,"b":-47.4}],[{"hex":"#3A4257","L":28.0,"a":2.4,"b":-13.5},{"hex":"#2D4269","L":27.9,"a":4.5,"b":-25.2},{"hex":"#08427D","L":27.8,"a":6.9,"b":-38.1}],[{"hex":"#242A38","L":17.0,"a":1.5,"b":-9.8},{"hex":"#1B2A45","L":17.0,"a":3.2,"b":-18.8},{"hex":"#042A53","L":16.9,"a":5.2,"b":-28.4}]],"HC":[[{"hex":"#374350","L":27.8,"a":-1.3,"b":-9.4},{"hex":"#29455D","L":28.1,"a":-2.7,"b":-17.4},{"hex":"#07466A","L":27.9,"a":-3.9,"b":-26.0}],[{"hex":"#3A4257","L":28.0,"a":2.4,"b":-13.5},{"hex":"#2D4269","L":27.9,"a":4.5,"b":-25.2},{"hex":"#08427D","L":27.8,"a":6.9,"b":-38.1}],[{"hex":"#413D66","L":27.8,"a":12.5,"b":-23.4},{"hex":"#373986","L":27.9,"a":23.4,"b":-43.7},{"hex":"#0E35A9","L":28.1,"a":34.5,"b":-64.9}]],"hue":["청록빛","보랏빛"]}};
+const WORDS = [["red","빨강"],["orange","주황"],["yellow","노랑"],["green","초록"],["blue","파랑"],["purple","보라"]];
+const COLOR_KO = { red: "빨간색", orange: "주황색", yellow: "노란색", green: "초록색", blue: "파란색", purple: "보라색" };   // "선호하는 ___을 골라 주세요"
+const GRIDS = {"red":[[[{"hex":"#E1443D","L":52.3,"a":60.0,"b":39.4},{"hex":"#F41120","L":51.5,"a":76.3,"b":54.8}],[{"hex":"#CB3D37","L":47.3,"a":55.4,"b":36.1},{"hex":"#DD0E1C","L":46.6,"a":70.9,"b":50.7}]],[[{"hex":"#EB6860","L":60.1,"a":50.1,"b":29.7},{"hex":"#FD544F","L":59.6,"a":63.6,"b":39.1}],[{"hex":"#E94A46","L":54.6,"a":60.7,"b":37.5},{"hex":"#FD1C2C","L":53.8,"a":77.4,"b":51.7}]],[[{"hex":"#C03936","L":44.7,"a":53.3,"b":33.2},{"hex":"#D10C1F","L":44.1,"a":68.1,"b":46.2}],[{"hex":"#AB322F","L":39.8,"a":48.8,"b":30.5},{"hex":"#BA0A1B","L":39.1,"a":62.4,"b":42.0}]],[[{"hex":"#DC4258","L":51.5,"a":60.6,"b":22.7},{"hex":"#EF104C","L":50.9,"a":76.6,"b":29.7}],[{"hex":"#C73B4F","L":46.7,"a":56.2,"b":21.0},{"hex":"#D80D44","L":46.0,"a":71.0,"b":27.4}]],[[{"hex":"#D75A37","L":54.0,"a":47.2,"b":44.0},{"hex":"#E9440B","L":53.4,"a":61.3,"b":62.2}],[{"hex":"#C35031","L":48.9,"a":44.3,"b":40.7},{"hex":"#D33D09","L":48.4,"a":56.8,"b":57.7}]]],"orange":[[[{"hex":"#F0924C","L":69.1,"a":29.5,"b":51.1},{"hex":"#FE8A24","L":69.0,"a":37.9,"b":67.9}],[{"hex":"#E18640","L":64.5,"a":29.1,"b":51.2},{"hex":"#EE7D0F","L":63.9,"a":37.8,"b":68.5}]],[[{"hex":"#F3AD76","L":76.1,"a":19.5,"b":38.4},{"hex":"#FEA861","L":76.0,"a":25.1,"b":49.2}],[{"hex":"#F19A50","L":71.1,"a":25.9,"b":51.4},{"hex":"#FE9328","L":70.9,"a":33.4,"b":68.3}]],[[{"hex":"#DB7F3E","L":62.1,"a":30.2,"b":49.4},{"hex":"#E8760E","L":61.6,"a":39.0,"b":66.7}],[{"hex":"#CA7438","L":57.3,"a":29.1,"b":46.5},{"hex":"#D56C0C","L":56.9,"a":36.5,"b":62.5}]],[[{"hex":"#EF8655","L":66.5,"a":35.8,"b":43.6},{"hex":"#FD7C39","L":66.1,"a":45.1,"b":57.2}],[{"hex":"#E6753D","L":61.4,"a":40.0,"b":49.6},{"hex":"#F5680E","L":60.9,"a":50.6,"b":67.2}]],[[{"hex":"#F0A04A","L":72.3,"a":22.0,"b":55.4},{"hex":"#FC9913","L":71.8,"a":29.0,"b":74.1}],[{"hex":"#DE9444","L":67.3,"a":20.6,"b":52.2},{"hex":"#EA8E10","L":67.1,"a":27.2,"b":70.3}]]],"yellow":[[[{"hex":"#F2E55F","L":89.6,"a":-11.4,"b":65.1},{"hex":"#F6E51B","L":89.6,"a":-12.4,"b":85.8}],[{"hex":"#E4D859","L":85.0,"a":-11.1,"b":62.3},{"hex":"#E8D818","L":85.0,"a":-12.0,"b":82.3}]],[[{"hex":"#FCF977","L":95.7,"a":-15.5,"b":61.8},{"hex":"#FFFA48","L":95.9,"a":-17.4,"b":80.4}],[{"hex":"#EFEC61","L":91.2,"a":-16.0,"b":65.9},{"hex":"#F2ED1B","L":91.3,"a":-18.0,"b":87.0}]],[[{"hex":"#E3D056","L":82.9,"a":-7.7,"b":61.2},{"hex":"#E9CF17","L":82.8,"a":-7.0,"b":80.7}],[{"hex":"#D5C350","L":78.2,"a":-7.3,"b":58.4},{"hex":"#DAC215","L":78.1,"a":-6.9,"b":76.8}]],[[{"hex":"#F8DC79","L":88.1,"a":-2.6,"b":51.8},{"hex":"#FEDB58","L":88.1,"a":-1.8,"b":66.7}],[{"hex":"#EFCE57","L":83.4,"a":-1.6,"b":61.7},{"hex":"#F6CD18","L":83.5,"a":-0.5,"b":81.6}]],[[{"hex":"#E5F262","L":92.0,"a":-22.8,"b":66.1},{"hex":"#E6F41C","L":92.3,"a":-26.2,"b":87.2}],[{"hex":"#D8E45C","L":87.3,"a":-21.6,"b":63.2},{"hex":"#D9E61A","L":87.6,"a":-25.0,"b":83.4}]]],"green":[[[{"hex":"#4EB056","L":64.4,"a":-47.6,"b":37.4},{"hex":"#11B735","L":65.1,"a":-63.6,"b":52.7}],[{"hex":"#459D4C","L":57.9,"a":-43.7,"b":34.4},{"hex":"#0EA32F","L":58.5,"a":-58.3,"b":48.0}]],[[{"hex":"#8DC856","L":74.5,"a":-37.9,"b":50.2},{"hex":"#7FCD13","L":74.9,"a":-48.9,"b":71.9}],[{"hex":"#7FB54D","L":68.0,"a":-35.2,"b":46.6},{"hex":"#72B910","L":68.2,"a":-45.5,"b":66.6}]],[[{"hex":"#5ECD93","L":74.8,"a":-45.0,"b":19.3},{"hex":"#17D487","L":75.4,"a":-60.4,"b":26.1}],[{"hex":"#55B984","L":68.2,"a":-41.6,"b":18.1},{"hex":"#14C07A","L":68.8,"a":-56.1,"b":24.4}]],[[{"hex":"#618B3A","L":53.3,"a":-29.0,"b":38.1},{"hex":"#578F0A","L":53.7,"a":-37.7,"b":55.0}],[{"hex":"#547931","L":46.5,"a":-26.1,"b":34.6},{"hex":"#4B7C07","L":46.7,"a":-33.7,"b":49.7}]],[[{"hex":"#408F65","L":53.6,"a":-34.6,"b":15.3},{"hex":"#0C945D","L":54.0,"a":-46.3,"b":20.2}],[{"hex":"#367C58","L":46.7,"a":-30.9,"b":13.1},{"hex":"#098150","L":47.4,"a":-42.1,"b":18.5}]]],"blue":[[[{"hex":"#3C7CD4","L":51.8,"a":9.2,"b":-51.3},{"hex":"#0977F2","L":51.3,"a":19.8,"b":-69.0}],[{"hex":"#336CB9","L":45.4,"a":8.0,"b":-46.1},{"hex":"#0767D4","L":44.8,"a":18.2,"b":-62.7}]],[[{"hex":"#4E9EE0","L":62.8,"a":-4.2,"b":-40.5},{"hex":"#109EF9","L":62.8,"a":-1.3,"b":-54.4}],[{"hex":"#458DC8","L":56.5,"a":-4.0,"b":-37.1},{"hex":"#0D8DDE","L":56.5,"a":-1.6,"b":-49.6}]],[[{"hex":"#7794E3","L":62.1,"a":10.8,"b":-43.1},{"hex":"#6C90FD","L":61.8,"a":18.8,"b":-58.0}],[{"hex":"#6181DE","L":55.6,"a":15.6,"b":-50.9},{"hex":"#547AFD","L":54.8,"a":28.2,"b":-69.3}]],[[{"hex":"#316794","L":41.9,"a":-2.7,"b":-30.0},{"hex":"#0767A5","L":41.8,"a":-0.6,"b":-40.3}],[{"hex":"#28577D","L":35.4,"a":-3.0,"b":-26.1},{"hex":"#05578C","L":35.4,"a":-0.7,"b":-35.5}]],[[{"hex":"#3351D4","L":40.0,"a":35.2,"b":-70.4},{"hex":"#2A3AFC","L":38.7,"a":61.3,"b":-95.2}],[{"hex":"#253CC6","L":33.3,"a":42.0,"b":-73.4},{"hex":"#230DEE","L":31.3,"a":73.2,"b":-99.6}]]],"purple":[[[{"hex":"#8D42D2","L":44.5,"a":57.6,"b":-61.7},{"hex":"#970EF1","L":43.1,"a":80.8,"b":-81.5}],[{"hex":"#7A38B6","L":38.3,"a":51.8,"b":-55.5},{"hex":"#820BD0","L":37.0,"a":72.3,"b":-72.8}]],[[{"hex":"#8F76E2","L":56.2,"a":34.3,"b":-51.8},{"hex":"#926AFD","L":55.5,"a":49.0,"b":-68.0}],[{"hex":"#815EDE","L":49.3,"a":43.6,"b":-60.7},{"hex":"#854BFC","L":48.2,"a":62.2,"b":-79.2}]],[[{"hex":"#BD55E2","L":54.8,"a":62.7,"b":-53.8},{"hex":"#CB2BFD","L":53.4,"a":84.8,"b":-71.0}],[{"hex":"#A945CD","L":48.3,"a":61.0,"b":-52.4},{"hex":"#B70FE6","L":47.1,"a":82.6,"b":-68.6}]],[[{"hex":"#5F35B5","L":34.6,"a":47.8,"b":-61.2},{"hex":"#640AD3","L":33.1,"a":70.2,"b":-81.0}],[{"hex":"#4E2B98","L":28.4,"a":41.9,"b":-54.0},{"hex":"#5307B1","L":27.1,"a":61.6,"b":-71.0}]],[[{"hex":"#7A3094","L":34.7,"a":47.8,"b":-41.0},{"hex":"#8408A7","L":33.7,"a":65.1,"b":-54.0}],[{"hex":"#65267C","L":28.3,"a":42.1,"b":-36.3},{"hex":"#6E058C","L":27.5,"a":57.2,"b":-47.7}]]]};   // GRIDS[word][grid 0-4] = 2 rows x 2 colors
 const PALETTE = [                                                    // all in the predictor's 1,000-name vocabulary
   ["빨강 계열", [["red","빨강"],["dark red","진한 빨강"],["bright red","밝은 빨강"],["crimson","진홍"],["scarlet","주홍빛 빨강"],["cherry red","체리색"],["burgundy","버건디"],["maroon","적갈색"],["wine","와인색"],["brick red","벽돌색"]]],
   ["분홍 계열", [["pink","분홍"],["light pink","연분홍"],["pale pink","옅은 분홍"],["hot pink","진분홍"],["rose","장밋빛"],["dusty rose","탁한 장밋빛"],["salmon","연어색"],["coral","산호색"],["peach","복숭아색"],["magenta","자홍"],["fuchsia","푸크시아"],["mauve","연보라빛 분홍"]]],
@@ -131,13 +133,13 @@ const PALETTE = [                                                    // all in t
   ["보라 계열", [["purple","보라"],["light purple","연보라"],["dark purple","진보라"],["violet","바이올렛"],["lavender","라벤더"],["lilac","라일락"],["plum","자두색"],["indigo","남보라"],["orchid","난초색"],["grape","포도색"]]],
   ["무채색", [["gray","회색"],["light gray","연회색"],["dark gray","진회색"],["silver","은색"],["charcoal","숯색"],["slate","청회색"],["black","검정"],["white","흰색"],["off-white","미색"]]] ];
 const KO = Object.fromEntries(PALETTE.flatMap(g => g[1]));
-const PROMPTS = [                                                    // code/user_study_server/trials_pref2.json: test words = context words
-  { id: "p_red_car", color: "red", ko: "빨간", object: "자동차" }, { id: "p_blue_chair", color: "blue", ko: "파란", object: "소파 의자" },   // unguided: images_ab/<id>/<gen>.jpg
-  { id: "p_green_hat", color: "green", ko: "초록", object: "니트 모자" }, { id: "p_orange_pumpkin", color: "orange", ko: "주황", object: "호박" },  // (FLUX: 768 px, 28 steps)
-  { id: "p_navy_jacket", color: "navy blue", ko: "남색", object: "재킷" } ];
+const PROMPTS = [                                                    // code/user_study_server/trials_pref3.json: test words = context words
+  { id: "p_red_knit", color: "red", ko: "빨간", object: "니트 스웨터" }, { id: "p_orange_pumpkin", color: "orange", ko: "주황", object: "호박" },   // unguided: images_ab/<id>/<gen>.jpg
+  { id: "p_yellow_cushion", color: "yellow", ko: "노란", object: "쿠션" }, { id: "p_green_mug", color: "green", ko: "초록", object: "머그컵" },   // (FLUX: 768 px, 28 steps)
+  { id: "p_blue_chair", color: "blue", ko: "파란", object: "소파 의자" }, { id: "p_purple_towel", color: "purple", ko: "보라", object: "수건" } ];
 const GENS = ["sd35", "flux"];
-let ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));     // 10 A/B items (only the generators the server serves)
-const VERSION = "pref5";
+let ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));     // 12 A/B items (only the generators the server serves)
+const VERSION = "pref6";
 const ENDPOINT = "https://script.google.com/macros/s/AKfycbwCvTPmdHTpjzjaPpZdl-j-OjecBMxxow6NTYnPsXauXDs4bW_SNbMGTN_sO14J0y8W/exec";
 const TEST = new URLSearchParams(location.search).has("test");   // ?test: click through the context screens without the server (nothing is sent)
 let SERVER = "";                                                    // from config.json (the study server's public address)
@@ -183,7 +185,7 @@ function home() {
     <h2>시작하기 전에</h2>
     <ul class="checks emoji">
       <li><span aria-hidden="true">🔆</span><span>화면 밝기는 평소대로 두고, 야간 모드나 블루라이트 필터는 꺼주세요.</span></li>
-      <li><span aria-hidden="true">🎨</span><span>빨강·주황·초록·파랑·남색마다 색 9개가 두 번씩 나옵니다(밝기와 선명함이 다른 9개, 색감과 선명함이 다른 9개). 그중 <b>여러분이 원하는 그 색</b>에 가장 가까운 것을 골라 주세요.</span></li>
+      <li><span aria-hidden="true">🎨</span><span>빨강·주황·노랑·초록·파랑·보라마다 밝기·선명도가 다른 색 4개가 다섯 번씩 나옵니다. 매번 그중 <b>여러분이 원하는 그 색</b>에 가장 가까운 것을 골라 주세요.</span></li>
       <li><span aria-hidden="true">💬</span><span>정답은 없습니다. 이미지에 그 색 이름을 썼을 때 나왔으면 하는 색을 골라 주세요.</span></li>
     </ul>
   </div>
@@ -200,26 +202,22 @@ function home() {
       catch (e) { err.textContent = "지금은 연구 서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 연구자에게 문의해 주세요."; return; }
     }
     S.tStart = performance.now(); S.startedAt = new Date().toISOString(); S.timing = {};
-    S.order = ["LC", "HC"].flatMap(g => WORDS.map(([w, ko]) => ({ w, ko, g }))); S.i = 0; S.answers = []; naming();   // red, orange, green, blue, navy (lightness), then again (hue)
+    S.order = [0, 1, 2, 3, 4].flatMap(g => WORDS.map(([w, ko]) => ({ w, ko, g }))); S.i = 0; S.answers = []; naming();   // grid 1 of red .. purple, then grid 2, ...
   };
   document.getElementById("go").onclick = go;
 }
 
-/* ---------------- 1. preference context: one axis-ordered 3x3 grid per word (rows lightness, columns chroma) ---------------- */
+/* ---------------- 1. preference context: 2x2 grids of four colors of the word (top lighter, right more vivid) ---------------- */
 function naming() {
   const task = S.order[S.i], n = S.order.length; let pick = null;
-  const G = GRIDS[task.w], grid = G[task.g], hue = G.hue;
+  const grid = GRIDS[task.w][task.g];
   const cells = grid.flatMap((row, r) => row.map((c, k) => Object.assign({ r, c: k }, c)));
   view(`${header(`색 ${S.i + 1} / ${n}`)}
   <div class="bar"><i style="width:${(S.i / n) * 100}%"></i></div>
   <div class="card">
     <h2>선호하는 <b>${esc(COLOR_KO[task.w])}</b>을 골라 주세요.</h2>
-    <p class="muted" style="font-size:13px">${task.g === "LC" ? "위로 갈수록 밝고, 아래로 갈수록 어둡습니다." : `위로 갈수록 ${esc(hue[0])}, 아래로 갈수록 ${esc(hue[1])}이 돕니다.`} 오른쪽으로 갈수록 선명합니다.</p>
-    <div class="axes">
-      <span class="ax-y"><span>${task.g === "LC" ? "밝게" : esc(hue[0])}<br>↑</span><span>↓<br>${task.g === "LC" ? "어둡게" : esc(hue[1])}</span></span>
-      <div class="grid9">${cells.map((c, i) => `<button class="cell" data-i="${i}" style="background:${c.hex}" aria-label="${task.g === "LC" ? "밝기" : "색감"} ${c.r + 1}행, 선명함 ${c.c + 1}단계"></button>`).join("")}</div>
-      <span class="ax-x"><span>← 차분하게</span><span>선명하게 →</span></span>
-    </div>
+    <p class="muted" style="font-size:13px">밝기·선명도가 다른 네 가지입니다.</p>
+    <div class="grid4">${cells.map((c, i) => `<button class="cell" data-i="${i}" style="background:${c.hex}" aria-label="색 ${i + 1}"></button>`).join("")}</div>
     <div class="err" id="err"></div>
     <div class="btns"><button class="primary" id="next">${S.i + 1 < n ? "다음" : "완료"}</button></div>
   </div>`);
@@ -239,7 +237,7 @@ async function submitNaming() {
   if (TEST) {                                                         // test mode: show the picks, send nothing
     view(`${header("테스트 모드")}<h1>고른 색 (서버로 보내지 않음)</h1>
     <div class="card">${S.answers.map(x => `<p><span style="display:inline-block;width:28px;height:28px;border-radius:4px;vertical-align:middle;background:${x.hex}"></span>
-      <b>${esc(x.word)}</b> ${x.grid === "LC" ? "밝기×선명함" : "색감×선명함"} · ${esc(x.hex)} · L ${x.L} a ${x.a} b ${x.b} · ${x.row + 1}행 ${x.col + 1}열 · ${(x.ms / 1000).toFixed(1)}초</p>`).join("")}</div>`);
+      <b>${esc(x.word)}</b> 그리드 ${x.grid + 1} · ${esc(x.hex)} · L ${x.L} a ${x.a} b ${x.b} · ${x.row + 1}행 ${x.col + 1}열 · ${(x.ms / 1000).toFixed(1)}초</p>`).join("")}</div>`);
     console.log(S.answers); return;
   }
   view(`${header("잠시만요")}<h1>답변을 보내는 중입니다…</h1>`);
@@ -327,7 +325,7 @@ function drawPlate(cv, P) {
 
 async function afterSurvey() {
   S.timing.survey_ms = Math.round(performance.now() - S.tSurvey);
-  S.sends = [sheet({ type: "naming", protocol: "pref-axes2", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(),
+  S.sends = [sheet({ type: "naming", protocol: "pref-6x5", pid: S.pid, job: S.job, answers: S.answers, survey: S.survey, device: device(),
                      timing: Object.assign({ started_at: S.startedAt }, S.timing), at: new Date().toISOString(), v: VERSION })];
   S.queue = shuffle(ITEMS.filter(x => x.gen === "sd35")).concat(shuffle(ITEMS.filter(x => x.gen === "flux")));   // SD 3.5 images are ready first
   S.done = 0; nextItem();
