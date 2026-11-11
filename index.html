@@ -398,7 +398,7 @@ function ab(it) {
     S.choices[it.key] = choice;
     const tg = +it.id.split("_g").pop(), ug = (S.groups || {})[it.color];
     S.sends = (S.sends || []).concat(sheet({ type: "rank", protocol: "pref-seed", pid: S.pid, job: S.job, trial: it.key, gen: it.gen, prompt: it.id, object: it.object, color: it.color,
-            group: tg, user_group: ug, test: tg === ug ? "inter" : "intra",   // intra: a group the participant is not in (12), inter: the participant's own group (4)
+            group: tg, user_group: ug, test: tg === ug ? "same" : "diff",   // same: the participant's own group (4 pairs), diff: one of the other three groups (12)
             rank: [choice], shown: sides.slice(), choice, ms: Math.round(performance.now() - S.tItem), wait_ms: S.waitMs,
             elapsed_ms: Math.round(performance.now() - S.tStart), at: new Date().toISOString(), v: VERSION }));   // sent in the background
     S.done++; nextItem();
