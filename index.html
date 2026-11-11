@@ -115,9 +115,9 @@ ul.checks.emoji li > span:first-child { flex: none; width: 1.4em; text-align: ce
 
 <script>
 /* One session: ID -> preference context: for green, blue, purple and pink, five screens each (20 screens: screen 1 of every
-   word in this order, then screen 2, ...). Each screen: four SD 3.5 images of the same prompt and object with different seeds, one
-   from each of the word's four color groups (20 seeds per word, object color by GroundingDINO + SAM, 4 groups of 5 by k-medoids on
-   CIEDE2000; code/user_study_server/pref_scenes/seed20de_groups.json). The picked image's object color is sent as a (color, word)
+   word in this order, then screen 2, ...). Each screen: four swatches, the object colors of four SD 3.5 images of the same prompt
+   (different seeds), one from each of the word's four color groups (20 seeds per word, object color by GroundingDINO + SAM, 4 groups of 5 by k-medoids on
+   CIEDE2000; code/user_study_server/pref_scenes/seed20de_groups.json). The picked color is sent as a (color, word)
    context pair -> our images are generated meanwhile (one per group: the group's medoid seed, guided with the participant's picks)
    -> short survey -> A/B choices against the unguided image of the same seed (16). Responses go to the Google Sheet (context rows:
    type "naming", protocol "pref-seed"; A/B rows: "rank").  ?test: click through the context screens without the server. */
@@ -184,7 +184,7 @@ function home() {
     <h2>시작하기 전에</h2>
     <ul class="checks emoji">
       <li><span aria-hidden="true">🔆</span><span>화면 밝기는 평소대로 두고, 야간 모드나 블루라이트 필터는 꺼주세요.</span></li>
-      <li><span aria-hidden="true">🎨</span><span>초록·파랑·보라·분홍마다 같은 물체를 그린 이미지 4장이 다섯 번씩 나옵니다. 매번 그중 물체의 색이 <b>여러분이 원하는 그 색</b>에 가장 가까운 것을 골라 주세요.</span></li>
+      <li><span aria-hidden="true">🎨</span><span>초록·파랑·보라·분홍마다 색 4개가 다섯 번씩 나옵니다. 매번 그중 <b>여러분이 원하는 그 색</b>에 가장 가까운 것을 골라 주세요.</span></li>
       <li><span aria-hidden="true">💬</span><span>정답은 없습니다. 이미지에 그 색 이름을 썼을 때 나왔으면 하는 색을 골라 주세요.</span></li>
     </ul>
   </div>
@@ -206,8 +206,7 @@ function home() {
   document.getElementById("go").onclick = go;
 }
 
-/* ---------------- 1. preference context: four images of the word's object, one from each color group ---------------- */
-const imgOf = (w, seed) => `images_pref/${PREF[w].scene}/s${seed}.jpg`;
+/* ---------------- 1. preference context: four swatches (object colors of four seeds), one from each color group ---------------- */
 const optionsOf = t => shuffle(PREF[t.w].groups.map((g, gi) => Object.assign({ group: gi }, g[t.k])));
 function naming() {
   const task = S.order[S.i], n = S.order.length; let pick = null;
@@ -216,19 +215,17 @@ function naming() {
   <div class="bar"><i style="width:${(S.i / n) * 100}%"></i></div>
   <div class="card">
     <h2>선호하는 <b>${esc(COLOR_KO[task.w])}</b>을 골라 주세요.</h2>
-    <p class="muted" style="font-size:13px">${esc(P.object)}의 색을 보고, 여러분이 원하는 ${esc(COLOR_KO[task.w])}에 가장 가까운 것을 골라 주세요.</p>
-    <div class="grid4 imgs">${opts.map((c, i) => `<button class="cell" data-i="${i}" aria-label="이미지 ${i + 1}"><img src="${esc(imgOf(task.w, c.seed))}" alt=""></button>`).join("")}</div>
+    <p class="muted" style="font-size:13px">네 가지 색 중 하나를 골라 주세요.</p>
+    <div class="grid4">${opts.map((c, i) => `<button class="cell" data-i="${i}" style="background:${c.hex}" aria-label="색 ${i + 1}"></button>`).join("")}</div>
     <div class="err" id="err"></div>
     <div class="btns"><button class="primary" id="next">${S.i + 1 < n ? "다음" : "완료"}</button></div>
   </div>`);
-  const nx = S.order[S.i + 1];                                        // preload the next screen
-  if (nx) (nx.opts || (nx.opts = optionsOf(nx))).forEach(c => { new Image().src = imgOf(nx.w, c.seed); });
   S.t0 = performance.now();
   app.querySelectorAll(".cell").forEach(b => b.onclick = () => {
     pick = opts[+b.dataset.i]; app.querySelectorAll(".cell").forEach(x => x.classList.toggle("on", x === b));
   });
   document.getElementById("next").onclick = () => {
-    if (!pick) { document.getElementById("err").textContent = "이미지를 하나 골라 주세요."; return; }
+    if (!pick) { document.getElementById("err").textContent = "색을 하나 골라 주세요."; return; }
     S.answers.push({ word: task.w, screen: task.k, group: pick.group, seed: pick.seed, pos: opts.indexOf(pick), hex: pick.hex, L: pick.L, a: pick.a, b: pick.b,
                      shown: opts.map(o => o.seed), ms: Math.round(performance.now() - S.t0) });
     S.i++; if (S.i >= n) S.timing.naming_ms = Math.round(performance.now() - S.tStart);
