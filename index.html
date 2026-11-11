@@ -132,9 +132,9 @@ const PALETTE = [                                                    // all in t
   ["무채색", [["gray","회색"],["light gray","연회색"],["dark gray","진회색"],["silver","은색"],["charcoal","숯색"],["slate","청회색"],["black","검정"],["white","흰색"],["off-white","미색"]]] ];
 const KO = Object.fromEntries(PALETTE.flatMap(g => g[1]));
 const PROMPTS = [                                                    // code/user_study_server/trials_pref2.json: test words = context words
-  { id: "p_red_rose", color: "red", ko: "빨간", object: "장미 한 송이" }, { id: "p_blue_chair", color: "blue", ko: "파란", object: "소파 의자" },   // unguided: images_ab/<id>/<gen>.jpg
-  { id: "p_green_bowl", color: "green", ko: "초록", object: "그릇" }, { id: "p_orange_pumpkin", color: "orange", ko: "주황", object: "호박" },  // (FLUX: 768 px, 28 steps)
-  { id: "p_navy_hat", color: "navy blue", ko: "남색", object: "니트 모자" } ];
+  { id: "p_red_car", color: "red", ko: "빨간", object: "자동차" }, { id: "p_blue_chair", color: "blue", ko: "파란", object: "소파 의자" },   // unguided: images_ab/<id>/<gen>.jpg
+  { id: "p_green_hat", color: "green", ko: "초록", object: "니트 모자" }, { id: "p_orange_pumpkin", color: "orange", ko: "주황", object: "호박" },  // (FLUX: 768 px, 28 steps)
+  { id: "p_navy_jacket", color: "navy blue", ko: "남색", object: "재킷" } ];
 const GENS = ["sd35", "flux"];
 let ITEMS = GENS.flatMap(g => PROMPTS.map(p => Object.assign({ gen: g, key: p.id + "_" + g }, p)));     // 10 A/B items (only the generators the server serves)
 const VERSION = "pref5";
